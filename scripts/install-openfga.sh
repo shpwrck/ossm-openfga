@@ -6,6 +6,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 require_login
 ensure_fga
 
+# Namespace first: if the mesh scopes discovery (discoverySelectors), openfga
+# must be labeled before sidecars try to resolve the ext_authz bridge service.
+oc apply -f "$REPO_ROOT/deploy/openfga/namespace.yaml"
+enroll_discovery openfga
 apply_kustomize deploy/openfga
 
 if ! oc -n openfga get secret openfga-postgres >/dev/null 2>&1; then
@@ -70,7 +74,7 @@ check() {
 }
 check true  workload:demo/storefront can_call  service:orders
 check false workload:demo/storefront can_call  service:payments
-check true  workload:demo/payments   can_reach host:httpbin.org
+check true  workload:demo/payments   can_reach host:httpbingo.org
 ok "store bootstrapped and verified (store id: $STORE_ID)"
 
 oc -n openfga rollout status deploy/ext-authz-bridge --timeout=180s || \

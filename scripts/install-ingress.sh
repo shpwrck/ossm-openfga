@@ -5,12 +5,18 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 require_login
 ensure_fga
 
+# Namespace first: the Gateway's auto-deployment only happens in a namespace
+# istiod can see (matters when the mesh scopes discovery via discoverySelectors).
+oc apply -f "$REPO_ROOT/deploy/ingress/namespace.yaml"
+enroll_discovery ingress-demo
 apply_kustomize deploy/ingress
 
-# Authorino's OpenFGA callout authenticates with the same preshared token —
-# mirror the secret into the AuthPolicy namespace.
+# Authorino's OpenFGA callout authenticates with the same preshared token.
+# The AuthPolicy's sharedSecretRef is resolved in the namespace of the
+# AuthConfig that Authorino serves — kuadrant-system, where the Kuadrant
+# operator materializes AuthPolicies — NOT the AuthPolicy's own namespace.
 TOKEN="$(oc -n openfga get secret openfga-api-token -o jsonpath='{.data.token}' | base64 -d)"
-oc -n ingress-demo create secret generic openfga-api-token \
+oc -n kuadrant-system create secret generic openfga-api-token \
   --from-literal=token="$TOKEN" \
   --dry-run=client -o yaml | oc apply -f -
 
@@ -36,9 +42,21 @@ print(next(s["id"] for s in json.load(sys.stdin)["stores"] if s["name"] == "ossm
 export FGA_STORE_ID
 envsubst '$FGA_STORE_ID' < "$REPO_ROOT/deploy/ingress/authpolicies.yaml.tmpl" | oc apply -f -
 
-info "waiting for the gateway to be programmed"
-oc -n ingress-demo wait gateway/demo-gw --for=condition=Programmed --timeout=300s
-GW="$(oc -n ingress-demo get gateway demo-gw -o jsonpath='{.status.addresses[0].value}')"
+info "waiting for the gateway"
+oc -n ingress-demo wait gateway/demo-gw --for=condition=Accepted --timeout=300s
+# auto-deployment name follows the <gateway-name>-istio convention
+oc -n ingress-demo rollout status deploy/demo-gw-istio --timeout=300s
+
+# Reach the gateway via its LoadBalancer address where the cluster provides
+# one; on clusters without a LoadBalancer implementation (bare metal) the
+# Gateway never reaches Programmed — fall back to the Service's NodePort.
+GW="$(oc -n ingress-demo get gateway demo-gw -o jsonpath='{.status.addresses[0].value}' 2>/dev/null || true)"
+if [[ -z "$GW" ]]; then
+  node_ip="$(oc get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')"
+  node_port="$(oc -n ingress-demo get svc demo-gw-istio -o jsonpath='{.spec.ports[?(@.port==80)].nodePort}')"
+  GW="$node_ip:$node_port"
+  info "no LoadBalancer address (bare metal?) — using NodePort $GW"
+fi
 
 cat <<EOF
 

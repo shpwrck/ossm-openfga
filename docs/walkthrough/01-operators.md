@@ -19,7 +19,14 @@ Two OLM objects and three custom resources:
 !!! note "Already installed on your cluster?"
     On OpenShift 4.19+ the cluster ingress operator installs this same operator
     to back its native Gateway API support (`openshift-default` GatewayClass).
-    The install script detects an existing subscription and leaves it alone.
+    The install script detects an existing subscription — or an operator
+    installed with no Subscription at all — and leaves it alone. Likewise a
+    pre-existing `Istio`/`IstioCNI` control plane is **adopted, not
+    overwritten**: the script only registers the `openfga-ext-authz`
+    extensionProvider on it (a blind `oc apply` would prune fields like a
+    version pin or multi-cluster config). If the mesh scopes discovery with
+    `discoverySelectors`, each install script labels the demo namespaces into
+    discovery automatically.
 
 OSSM 3 is operator-driven: you declare an `Istio` resource and the operator
 runs the matching control plane (this replaced OSSM 2's
@@ -36,13 +43,16 @@ to false: **if the authorizer is down, requests are denied.** For an
 authorization system that's the right failure mode, and chapter 3 demonstrates
 it live.
 
-Alongside the `Istio` CR go two companions:
+Alongside the `Istio` CR goes one companion:
 
 - **`IstioCNI`** (`deploy/operators/instances/istio-cni.yaml`) — required on
   OpenShift; sets up pod networking hooks for sidecar injection.
-- **`IstioRevisionTag` named `default`**
-  (`deploy/operators/instances/istio-revision-tag.yaml`) — lets namespaces
-  join the mesh with the classic `istio-injection: enabled` label.
+
+Namespaces join the mesh with the classic `istio-injection: enabled` label
+because the `Istio` CR is named `default` with the `InPlace` update strategy,
+so its active revision is also named `default`. (An `IstioRevisionTag` is only
+needed with the `RevisionBased` strategy — and a tag may not share a name with
+an existing revision, so creating one here would fail.)
 
 ## Connectivity Link
 
@@ -62,7 +72,9 @@ With Service Mesh present, Connectivity Link **auto-detects Istio as its
 Gateway controller** — the same Envoy data plane serves the mesh and the
 gateway policies. We deliberately skip `TLSPolicy` and `DNSPolicy` (they'd
 pull in cert-manager and cloud DNS credentials); the demo gateway listens on
-plain HTTP at its load-balancer address.
+plain HTTP at its load-balancer address — or, on clusters without a
+LoadBalancer implementation (bare metal), at the NodePort the install script
+prints.
 
 ## Verify
 

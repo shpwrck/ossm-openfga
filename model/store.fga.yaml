@@ -48,7 +48,7 @@ tuples:
   # only payments may reach the external payment provider
   - user: workload:demo/payments
     relation: can_reach
-    object: host:httpbin.org
+    object: host:httpbingo.org
 
 tests:
   - name: ingress
@@ -91,10 +91,10 @@ tests:
   - name: egress
     check:
       - user: workload:demo/payments
-        object: host:httpbin.org
+        object: host:httpbingo.org
         assertions:
           can_reach: true
       - user: workload:demo/storefront
-        object: host:httpbin.org
+        object: host:httpbingo.org
         assertions:
           can_reach: false

@@ -88,15 +88,38 @@ is the product; it gets CI (`mkdocs build --strict`). The FGA model gets CI too
 
 **Public repo hygiene.** No cluster URLs, no kubeconfigs, no credentials, no
 customer names anywhere — including in git history and demo data. Identities in
-examples are `alice`/`bob`; the external host is `httpbin.org`.
+examples are `alice`/`bob`; the external host is `httpbingo.org`.
+
+## Validated on-cluster (2026-08-04)
+
+All five phases ran end-to-end against a live OpenShift 4.21 cluster (OSSM
+3.4.1 / RHCL 1.4.2 / OpenFGA v1.18.2) — see `VALIDATION.md` at the repo root
+for the full report. The researched risk spots resolved as follows:
+
+- **Helm `--set` key names** — correct as researched; no changes.
+- **Gateway auto-deployment SA name `demo-gw-istio`** — confirmed; the bridge
+  logs `user=workload:ingress-demo/demo-gw-istio` on the gateway→storefront
+  hop.
+- **`AuthPolicy` callout field shapes (kuadrant.io/v1 CEL)** — correct, with
+  two corrections discovered live: the shared secret must live in
+  `kuadrant-system` (where the AuthConfig is materialized), and
+  `apiKey.allNamespaces: true` is required for keys outside that namespace.
+- **`IstioRevisionTag` removed** — with `InPlace` + an `Istio` CR named
+  `default` the active revision is already named `default`; a same-named tag
+  is both unnecessary and rejected.
+- **Egress identity preservation (`ISTIO_MUTUAL`)** — confirmed: the bridge
+  sees the original workload, not the gateway.
+- **New: coexistence with a pre-existing mesh** — the scripts adopt an
+  existing operator/control plane additively (extensionProvider patch, no
+  blind `oc apply`), enroll namespaces when `discoverySelectors` scope
+  discovery, and `deploy/mesh/sidecar.yaml` overrides restrictive root-
+  namespace `Sidecar` defaults.
+- **New: no-LoadBalancer clusters** — the ingress script falls back to the
+  NodePort URL when the Gateway can't get an address (bare metal).
+- **New: external host swapped to httpbingo.org** — httpbin.org now sheds
+  load with 503s often enough to break the walkthrough's allow path.
 
 ## Open items
-
-- **On-cluster validation pass** — the manifests encode researched, documented
-  patterns but have not yet run against a live cluster. Highest-risk spots are
-  marked 🚧 in the walkthrough: the `AuthPolicy` callout field shapes
-  (kuadrant.io/v1 CEL forms), the gateway auto-deployment ServiceAccount name
-  (`demo-gw-istio`), and the Helm chart `--set` key names.
 - **NetworkPolicy comparison harness** (stretch): kube-burner-ocp
   `network-policy` workload + `netpolLatency` measurement vs tuple-write
   propagation; fortio fixed-QPS ladder (baseline / netpol / mesh /

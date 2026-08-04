@@ -3,6 +3,6 @@ kind: Namespace
 metadata:
   name: demo
   labels:
-    # works because deploy/operators/instances creates an IstioRevisionTag
-    # named `default`
+    # works because the Istio CR is named `default` with the InPlace update
+    # strategy, so its active revision is also named `default`
     istio-injection: enabled

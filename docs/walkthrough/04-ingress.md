@@ -19,6 +19,8 @@ The API keys for the demo users are generated at install time (nothing secret
 lives in this public repo):
 
 ```bash
+# LoadBalancer address; on bare metal (no LB implementation) use the
+# NodePort URL the install script printed instead
 GW=$(oc -n ingress-demo get gateway demo-gw -o jsonpath='{.status.addresses[0].value}')
 ALICE_KEY=$(oc -n ingress-demo get secret api-key-alice -o jsonpath='{.data.api_key}' | base64 -d)
 BOB_KEY=$(oc -n ingress-demo get secret api-key-bob -o jsonpath='{.data.api_key}' | base64 -d)
@@ -59,9 +61,29 @@ bin/fga tuple write --store-id $STORE user:alice member team:platform   # rehire
 One tuple deletion revoked her access to *every* route the platform team holds —
 that's the ReBAC composition NetworkPolicy/RBAC can't express.
 
-!!! info "🚧 Section pending validation"
-    The `AuthPolicy` listing with per-field commentary lands here once validated
-    on-cluster (metadata callout shape, response pattern matching, API key
-    Secrets).
+## The AuthPolicy, field by field
+
+```yaml title="deploy/ingress/authpolicies.yaml.tmpl"
+--8<-- "deploy/ingress/authpolicies.yaml.tmpl"
+```
+
+The parts that earn their place (all validated on-cluster against RHCL 1.4.2):
+
+- **`apiKey.allNamespaces: true`** — the api-key Secrets live in
+  `ingress-demo`, but Authorino resolves selectors relative to the generated
+  `AuthConfig`, which the Kuadrant operator materializes in `kuadrant-system`.
+  Without this flag every valid key is rejected as invalid (401).
+- **`metadata.http`** — the OpenFGA callout: a POST to
+  `/stores/<store-id>/check` whose `body.expression` is CEL building the
+  check JSON from the authenticated identity
+  (`auth.identity.metadata.annotations["userid"]`). The store id is a
+  runtime-generated ULID, which is why this file is a template the install
+  script fills in.
+- **`sharedSecretRef`** — resolved in the AuthConfig's namespace too, so the
+  install script mirrors the OpenFGA API token into `kuadrant-system`, not
+  into the AuthPolicy's own namespace.
+- **`patternMatching.patterns[].predicate`** — CEL over the metadata
+  response: `auth.metadata.openfga.allowed == true`. Deny is the default;
+  this is the only path to allow.
 
 **Next:** [Authorization at egress](05-egress.md)

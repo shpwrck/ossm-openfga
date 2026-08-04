@@ -5,6 +5,10 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 require_login
 
+# Namespace first: on a mesh that scopes discovery (discoverySelectors), demo
+# must be discoverable BEFORE pods start, or their sidecars get no config.
+oc apply -f "$REPO_ROOT/deploy/mesh/namespace.yaml"
+enroll_discovery demo
 apply_kustomize deploy/mesh
 
 for d in storefront orders payments inventory; do

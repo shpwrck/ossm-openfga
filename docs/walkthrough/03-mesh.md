@@ -42,6 +42,15 @@ The one enforcement resource behind all of this:
 --8<-- "deploy/mesh/authorization-policy.yaml"
 ```
 
+One supporting resource matters more than it looks: a `Sidecar` scoping what
+the demo namespace's proxies can see (`deploy/mesh/sidecar.yaml`). Its egress
+list **must include `openfga/*`** — the ext_authz provider cluster has to be
+visible to every proxy, or the fail-closed policy denies all traffic with
+`ext_authz_error` (flag `UAEX`) before the bridge is ever called. On meshes
+whose root namespace carries a restrictive default `Sidecar` (common in
+production and multi-cluster setups) this namespace-level override is what
+makes the demo work at all.
+
 ## Fix it with a tuple, not a rollout
 
 (Uses the `$STORE`/port-forward environment from [chapter 2](02-openfga.md#poke-the-store).)

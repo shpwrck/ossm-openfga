@@ -5,6 +5,10 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 require_login
 
+# Namespace first: the gateway-injection webhook needs istiod to see this
+# namespace (matters when the mesh scopes discovery via discoverySelectors).
+oc apply -f "$REPO_ROOT/deploy/egress/namespace.yaml"
+enroll_discovery istio-egress
 apply_kustomize deploy/egress
 oc -n istio-egress rollout status deploy/egress-gateway --timeout=300s
 
@@ -17,11 +21,11 @@ curl_as() {
   oc -n demo exec "deploy/$1" -c debug -- \
     curl -s -o /dev/null -w '%{http_code}' -m 10 "$2" || true
 }
-retry 12 5 test "$(curl_as payments http://httpbin.org/get)" = "200"
-ok "payments -> httpbin.org allowed (tuple exists)"
-[[ "$(curl_as storefront http://httpbin.org/get)" == "403" ]] ||
-  die "storefront -> httpbin.org was NOT denied"
-ok "storefront -> httpbin.org denied by OpenFGA (no tuple)"
+retry 12 5 test "$(curl_as payments http://httpbingo.org/get)" = "200"
+ok "payments -> httpbingo.org allowed (tuple exists)"
+[[ "$(curl_as storefront http://httpbingo.org/get)" == "403" ]] ||
+  die "storefront -> httpbingo.org was NOT denied"
+ok "storefront -> httpbingo.org denied by OpenFGA (no tuple)"
 code="$(curl_as storefront http://example.com/)"
 [[ "$code" != "200" ]] || die "unregistered host reachable — REGISTRY_ONLY not active"
 ok "unregistered hosts unroutable (REGISTRY_ONLY) — got $code"
