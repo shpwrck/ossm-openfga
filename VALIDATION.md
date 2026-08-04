@@ -82,13 +82,13 @@ gateway; `REGISTRY_ONLY` + NetworkPolicy bypass closure; fail-closed ext_authz.
 
 A single unattended `make demo` on a pristine cluster: no OSSM operator, no
 mesh, no Kuadrant, no demo namespaces. **All five phases passed on the first
-run, unmodified — total wall time ~3.5 minutes** (fresh Subscription at
-15:42:46Z, egress smoke test green at 15:45:47Z).
+run, unmodified — total wall time ~3.5 minutes** (OSSM CSV created
+15:42:46Z, egress smoke test green 15:45:47Z).
 
 ### Environment
 
-- OpenShift 4.20.30 (Kubernetes 1.33) on ROSA — multi-node, AWS, with a real
-  LoadBalancer implementation (unlike pass 1)
+- OpenShift 4.20.30 (Kubernetes 1.33) on ROSA — AWS, two worker nodes, with
+  a real LoadBalancer implementation (unlike pass 1)
 - OSSM operator 3.4.1 and RHCL 1.4.2 installed **fresh from OLM
   subscriptions** by `install-operators.sh` (the untested branch)
 - Istio **v1.30.3** from the fresh `Istio` CR — the operator's current
