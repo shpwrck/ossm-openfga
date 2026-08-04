@@ -1,6 +1,60 @@
-/* The three enforcement-plane cards on the welcome page: three equal columns
-   when the viewport has room, a single stacked column otherwise — never the
-   default auto-fit's uneven 2+1 wrap.
+/* ── Red Hat brand palette ──────────────────────────────────────────────────
+   Values from https://www.redhat.com/en/about/brand/standards/color
+   Mapping follows the standards' guidance: black masthead with red-50 as the
+   brand "pop" (saturated red reserved for emphasis, not large fills),
+   interaction-blue-50 for hyperlinks, and the core dark collection
+   (white/red on gray-90/gray-80) for the dark scheme. */
+:root {
+  --rh-red-40: #f56e6e;
+  --rh-red-50: #ee0000; /* Red Hat red */
+  --rh-red-60: #a60000;
+  --rh-gray-10: #f2f2f2;
+  --rh-gray-20: #e0e0e0;
+  --rh-gray-60: #4d4d4d;
+  --rh-gray-80: #292929;
+  --rh-gray-90: #1f1f1f;
+  --rh-gray-95: #151515;
+  --rh-blue-50: #0066cc; /* interaction blue: hyperlinks */
+}
+
+/* Light scheme: black/red on white (core light collection) */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: var(--rh-gray-95);
+  --md-primary-fg-color--light: var(--rh-gray-60);
+  --md-primary-fg-color--dark: #000000;
+  --md-accent-fg-color: var(--rh-red-50);
+  --md-typeset-a-color: var(--rh-blue-50);
+  --md-default-fg-color--light: var(--rh-gray-95);
+  --md-code-bg-color: var(--rh-gray-10);
+}
+
+/* Dark scheme: white/red on black (core dark collection, gray-90/gray-80) */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: var(--rh-gray-95);
+  --md-primary-fg-color--light: var(--rh-gray-60);
+  --md-primary-fg-color--dark: #000000;
+  --md-accent-fg-color: var(--rh-red-50);
+  /* blue-50 fails WCAG AA on gray-90; red-40 is a standards tint that passes */
+  --md-typeset-a-color: var(--rh-red-40);
+  --md-default-bg-color: var(--rh-gray-90);
+  --md-code-bg-color: var(--rh-gray-80);
+}
+
+/* The brand pop: primary call-to-action buttons in Red Hat red */
+.md-typeset .md-button--primary {
+  background-color: var(--rh-red-50);
+  border-color: var(--rh-red-50);
+  color: #ffffff;
+}
+.md-typeset .md-button--primary:is(:hover, :focus) {
+  background-color: var(--rh-red-60);
+  border-color: var(--rh-red-60);
+  color: #ffffff;
+}
+
+/* ── Welcome-page cards ─────────────────────────────────────────────────────
+   Three equal columns when the viewport has room, a single stacked column
+   otherwise — never the default auto-fit's uneven 2+1 wrap.
    Note: the theme defines grid-template-columns on the .grid DIV itself (the
    inner ul is display: contents), so the override must target the div. */
 .md-typeset .grid.three-planes {
