@@ -15,25 +15,29 @@
   --rh-gray-90: #1f1f1f;
   --rh-gray-95: #151515;
   --rh-blue-50: #0066cc; /* interaction blue: hyperlinks */
+
+  /* mkdocs.yml uses `primary: custom`, so the theme ships no palette values
+     and everything below is authoritative (no specificity fights with the
+     built-in palettes, whose header/tabs colors are hardcoded). */
+  --md-primary-fg-color: var(--rh-gray-95);
+  --md-primary-fg-color--light: var(--rh-gray-60);
+  --md-primary-fg-color--dark: #000000;
+  --md-primary-bg-color: #ffffff; /* text on the masthead */
+  --md-primary-bg-color--light: #ffffffb3;
+  --md-accent-fg-color: var(--rh-red-50);
+  --md-accent-fg-color--transparent: #ee00001a;
+  --md-accent-bg-color: #ffffff;
+  --md-accent-bg-color--light: #ffffffb3;
 }
 
 /* Light scheme: black/red on white (core light collection) */
 [data-md-color-scheme="default"] {
-  --md-primary-fg-color: var(--rh-gray-95);
-  --md-primary-fg-color--light: var(--rh-gray-60);
-  --md-primary-fg-color--dark: #000000;
-  --md-accent-fg-color: var(--rh-red-50);
   --md-typeset-a-color: var(--rh-blue-50);
-  --md-default-fg-color--light: var(--rh-gray-95);
   --md-code-bg-color: var(--rh-gray-10);
 }
 
 /* Dark scheme: white/red on black (core dark collection, gray-90/gray-80) */
 [data-md-color-scheme="slate"] {
-  --md-primary-fg-color: var(--rh-gray-95);
-  --md-primary-fg-color--light: var(--rh-gray-60);
-  --md-primary-fg-color--dark: #000000;
-  --md-accent-fg-color: var(--rh-red-50);
   /* blue-50 fails WCAG AA on gray-90; red-40 is a standards tint that passes */
   --md-typeset-a-color: var(--rh-red-40);
   --md-default-bg-color: var(--rh-gray-90);
