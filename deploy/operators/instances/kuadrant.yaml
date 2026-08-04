@@ -1,0 +1,9 @@
+# Instantiates Connectivity Link's components (Authorino, Limitador, DNS
+# operator). With OSSM installed, RHCL auto-detects Istio as the Gateway
+# controller — no extra wiring.
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant
+  namespace: kuadrant-system
+spec: {}

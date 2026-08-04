@@ -1,0 +1,43 @@
+name: bridge
+
+on:
+  push:
+    branches: [main]
+    paths: ["ext-authz/**", ".github/workflows/bridge.yml"]
+  pull_request:
+    paths: ["ext-authz/**", ".github/workflows/bridge.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ext-authz/go.mod
+      - run: cd ext-authz && go vet ./... && go test ./... && go build ./...
+
+  image:
+    if: github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ext-authz
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/ext-authz-bridge:latest
+            ghcr.io/${{ github.repository }}/ext-authz-bridge:${{ github.sha }}

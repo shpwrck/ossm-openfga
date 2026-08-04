@@ -1,0 +1,15 @@
+# Allows the HTTPRoutes in ingress-demo to reference the storefront Service in
+# the demo namespace (Gateway API cross-namespace safety).
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-ingress-demo-routes
+  namespace: demo
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: ingress-demo
+  to:
+    - group: ""
+      kind: Service

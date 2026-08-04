@@ -1,0 +1,97 @@
+# Routing that funnels mesh traffic for httpbin.org through the egress
+# gateway, with two properties that matter to the demo:
+#
+#  1. The mesh→gateway leg uses ISTIO_MUTUAL, so the ORIGINAL workload's
+#     SPIFFE identity is what the gateway (and the ext_authz check) sees —
+#     not the gateway's own identity.
+#  2. The gateway originates TLS to the external host (SIMPLE at :443), so
+#     apps speak plain HTTP, the gateway sees L7 attributes for authorization,
+#     and the wire outside the cluster is still HTTPS.
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata:
+  name: httpbin-org
+  namespace: istio-egress
+spec:
+  hosts: [httpbin.org]
+  location: MESH_EXTERNAL
+  resolution: DNS
+  ports:
+    - number: 80
+      name: http
+      protocol: HTTP
+    - number: 443
+      name: tls
+      protocol: TLS
+---
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: egress-gateway
+  namespace: istio-egress
+spec:
+  selector:
+    istio: egress-gateway
+  servers:
+    - port:
+        number: 8080
+        name: http
+        protocol: HTTPS
+      hosts: [httpbin.org]
+      tls:
+        mode: ISTIO_MUTUAL # preserves caller identity across the hop
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: egress-gateway
+  namespace: istio-egress
+spec:
+  host: egress-gateway.istio-egress.svc.cluster.local
+  trafficPolicy:
+    portLevelSettings:
+      - port:
+          number: 80
+        tls:
+          mode: ISTIO_MUTUAL
+          sni: httpbin.org
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: httpbin-org-tls-origination
+  namespace: istio-egress
+spec:
+  host: httpbin.org
+  trafficPolicy:
+    portLevelSettings:
+      - port:
+          number: 443
+        tls:
+          mode: SIMPLE # gateway originates TLS to the external host
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: httpbin-org-through-egress
+  namespace: istio-egress
+spec:
+  hosts: [httpbin.org]
+  gateways:
+    - mesh
+    - istio-egress/egress-gateway
+  http:
+    - match:
+        - gateways: [mesh]
+          port: 80
+      route:
+        - destination:
+            host: egress-gateway.istio-egress.svc.cluster.local
+            port: {number: 80}
+    - match:
+        - gateways: [istio-egress/egress-gateway]
+          port: 8080
+      route:
+        - destination:
+            host: httpbin.org
+            port: {number: 443}

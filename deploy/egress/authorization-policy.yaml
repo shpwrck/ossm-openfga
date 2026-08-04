@@ -1,0 +1,17 @@
+# The same OpenFGA bridge, now enforcing at the egress gateway. The bridge
+# recognizes the gateway as destination (EGRESS_GATEWAY_PRINCIPALS) and asks
+#   workload:<ns>/<sa> can_reach host:<Host header> ?
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: openfga-egress-authz
+  namespace: istio-egress
+spec:
+  selector:
+    matchLabels:
+      istio: egress-gateway
+  action: CUSTOM
+  provider:
+    name: openfga-ext-authz
+  rules:
+    - {}

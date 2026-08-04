@@ -1,0 +1,58 @@
+# The Envoy ext_authz → OpenFGA bridge (source: ext-authz/ in this repo).
+# Registered as extensionProvider `openfga-ext-authz` in the Istio CR; called
+# by every sidecar (chapter 3) and the egress gateway (chapter 5).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ext-authz-bridge
+  namespace: openfga
+  labels:
+    app: ext-authz-bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ext-authz-bridge
+  template:
+    metadata:
+      labels:
+        app: ext-authz-bridge
+    spec:
+      containers:
+        - name: bridge
+          image: ghcr.io/shpwrck/ossm-openfga/ext-authz-bridge:latest
+          ports:
+            - containerPort: 9191
+              name: grpc
+          env:
+            - name: FGA_API_URL
+              value: http://openfga.openfga.svc.cluster.local:8080
+            - name: FGA_STORE_NAME
+              value: ossm-openfga-demo # store id discovered by name at startup
+            - name: FGA_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openfga-api-token # created by install script, not in git
+                  key: token
+            # Requests arriving FROM these SPIFFE identities are egress-gateway
+            # hops: authorize workload→host instead of workload→service.
+            - name: EGRESS_GATEWAY_PRINCIPALS
+              value: cluster.local/ns/istio-egress/sa/egress-gateway
+          readinessProbe:
+            tcpSocket:
+              port: 9191
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ext-authz-bridge
+  namespace: openfga
+spec:
+  selector:
+    app: ext-authz-bridge
+  ports:
+    - port: 9191
+      targetPort: 9191
+      name: grpc

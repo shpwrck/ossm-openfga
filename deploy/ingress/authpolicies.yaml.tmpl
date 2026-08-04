@@ -1,0 +1,88 @@
+# AuthPolicies enforcing OpenFGA decisions at the gateway. Applied by
+# scripts/install-ingress.sh via envsubst — ${FGA_STORE_ID} is the runtime
+# store id (a generated ULID, not known until bootstrap).
+#
+# Pipeline per request: authenticate via API key -> POST an OpenFGA Check
+# (metadata.http callout) -> allow only if the response says allowed.
+# 🚧 Field shapes pending on-cluster validation against RHCL 1.4 (kuadrant.io/v1).
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: storefront-authz
+  namespace: ingress-demo
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: storefront
+  rules:
+    authentication:
+      api-key-users:
+        apiKey:
+          selector:
+            matchLabels:
+              app: demo-api-keys
+        credentials:
+          authorizationHeader:
+            prefix: APIKEY
+    metadata:
+      openfga:
+        http:
+          url: http://openfga.openfga.svc.cluster.local:8080/stores/${FGA_STORE_ID}/check
+          method: POST
+          contentType: application/json
+          body:
+            expression: |
+              {"tuple_key": {"user": "user:" + auth.identity.metadata.annotations["userid"], "relation": "can_get", "object": "route:storefront"}}
+          credentials:
+            authorizationHeader:
+              prefix: Bearer
+          sharedSecretRef:
+            name: openfga-api-token
+            key: token
+    authorization:
+      openfga-allowed:
+        patternMatching:
+          patterns:
+            - predicate: auth.metadata.openfga.allowed == true
+---
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: storefront-admin-authz
+  namespace: ingress-demo
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: storefront-admin
+  rules:
+    authentication:
+      api-key-users:
+        apiKey:
+          selector:
+            matchLabels:
+              app: demo-api-keys
+        credentials:
+          authorizationHeader:
+            prefix: APIKEY
+    metadata:
+      openfga:
+        http:
+          url: http://openfga.openfga.svc.cluster.local:8080/stores/${FGA_STORE_ID}/check
+          method: POST
+          contentType: application/json
+          body:
+            expression: |
+              {"tuple_key": {"user": "user:" + auth.identity.metadata.annotations["userid"], "relation": "can_admin", "object": "route:storefront-admin"}}
+          credentials:
+            authorizationHeader:
+              prefix: Bearer
+          sharedSecretRef:
+            name: openfga-api-token
+            key: token
+    authorization:
+      openfga-allowed:
+        patternMatching:
+          patterns:
+            - predicate: auth.metadata.openfga.allowed == true

@@ -1,0 +1,100 @@
+# OpenFGA store file: model + seed tuples + tests.
+#
+#   fga model test --tests model/store.fga.yaml   # runs offline, no server
+#   fga store import --file model/store.fga.yaml  # bootstraps a live store
+#
+# The tuples below ARE the demo's entire security policy, across all three
+# enforcement planes. Changing a line here changes what the mesh allows —
+# no manifest edits, no pod restarts.
+name: ossm-openfga-demo
+model_file: ./model.fga
+
+tuples:
+  # ── Ingress: users → routes ──────────────────────────────────────────────
+  # storefront is public to any authenticated user; admin panel is platform-team only
+  - user: user:*
+    relation: viewer
+    object: route:storefront
+  - user: team:platform#member
+    relation: admin
+    object: route:storefront-admin
+  - user: user:alice
+    relation: member
+    object: team:platform
+
+  # ── Mesh: workloads → services ───────────────────────────────────────────
+  # storefront → orders → payments is the sanctioned call chain;
+  # storefront may NOT call payments directly (that's the deny demo).
+  - user: workload:demo/storefront
+    relation: can_call
+    object: service:orders
+  - user: workload:demo/orders
+    relation: can_call
+    object: service:payments
+  - user: workload:demo/storefront
+    relation: can_call
+    object: service:inventory
+  - user: workload:demo/orders
+    relation: can_call
+    object: service:inventory
+  # The ingress gateway is a mesh workload too: once mesh enforcement is on,
+  # even the gateway needs a relationship to reach storefront. SA name follows
+  # the Gateway API auto-deployment convention <gateway-name>-istio.
+  - user: workload:ingress-demo/demo-gw-istio
+    relation: can_call
+    object: service:storefront
+
+  # ── Egress: workloads → external hosts ───────────────────────────────────
+  # only payments may reach the external payment provider
+  - user: workload:demo/payments
+    relation: can_reach
+    object: host:httpbin.org
+
+tests:
+  - name: ingress
+    check:
+      - user: user:bob
+        object: route:storefront
+        assertions:
+          can_get: true
+          can_admin: false
+      - user: user:alice
+        object: route:storefront-admin
+        assertions:
+          can_get: true   # admin implies viewer via 'viewer or admin'
+          can_admin: true
+      - user: user:bob
+        object: route:storefront-admin
+        assertions:
+          can_get: false
+          can_admin: false
+
+  - name: mesh
+    check:
+      - user: workload:demo/storefront
+        object: service:orders
+        assertions:
+          can_call: true
+      - user: workload:demo/storefront
+        object: service:payments
+        assertions:
+          can_call: false   # must go through orders
+      - user: workload:demo/orders
+        object: service:payments
+        assertions:
+          can_call: true
+      - user: workload:ingress-demo/demo-gw-istio
+        object: service:storefront
+        assertions:
+          can_call: true
+
+  - name: egress
+    check:
+      - user: workload:demo/payments
+        object: host:httpbin.org
+        assertions:
+          can_reach: true
+      - user: workload:demo/storefront
+        object: host:httpbin.org
+        assertions:
+          can_reach: false

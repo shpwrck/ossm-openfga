@@ -1,0 +1,10 @@
+# Require mTLS in the demo namespace: every request must carry a verifiable
+# SPIFFE identity — the `user` in every mesh OpenFGA check.
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: strict-mtls
+  namespace: demo
+spec:
+  mtls:
+    mode: STRICT

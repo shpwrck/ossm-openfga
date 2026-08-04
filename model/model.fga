@@ -1,0 +1,37 @@
+model
+  schema 1.1
+
+# ── Subjects ────────────────────────────────────────────────────────────────
+# A human (or API client) identity, established at the ingress gateway.
+type user
+
+# A team groups users; granting a team access grants every member access.
+# This is OpenFGA's differentiator over flat ACLs: relationships compose.
+type team
+  relations
+    define member: [user]
+
+# A mesh workload identity. Objects are named after the workload's
+# ServiceAccount: workload:<namespace>/<serviceaccount>, derived from the
+# SPIFFE principal (spiffe://<trust-domain>/ns/<ns>/sa/<sa>) that mTLS gives
+# every request inside the mesh.
+type workload
+
+# ── Ingress plane: which users may call which routes ────────────────────────
+type route
+  relations
+    define viewer: [user, user:*, team#member]
+    define admin: [user, team#member]
+    # admins can do everything viewers can — computed, not duplicated
+    define can_get: viewer or admin
+    define can_admin: admin
+
+# ── Mesh plane (east-west): which workloads may call which services ─────────
+type service
+  relations
+    define can_call: [workload]
+
+# ── Egress plane: which workloads may reach which external hosts ────────────
+type host
+  relations
+    define can_reach: [workload]

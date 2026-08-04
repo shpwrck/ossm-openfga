@@ -1,0 +1,7 @@
+# Deliberately NOT mesh-enrolled: OpenFGA and the bridge are the mesh's
+# authorization dependency, so keeping them outside the mesh avoids the
+# bootstrap circularity of authorizing calls to the authorizer.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openfga

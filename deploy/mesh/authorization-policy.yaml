@@ -1,0 +1,14 @@
+# Delegate EVERY inbound request in the demo namespace to the OpenFGA bridge
+# (extensionProvider `openfga-ext-authz`, registered in the Istio CR).
+# From here on, "may X call Y" is answered by relationship tuples, not YAML.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: openfga-mesh-authz
+  namespace: demo
+spec:
+  action: CUSTOM
+  provider:
+    name: openfga-ext-authz
+  rules:
+    - {} # all requests; scope tighter in production

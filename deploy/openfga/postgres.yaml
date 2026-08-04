@@ -1,0 +1,61 @@
+# A deliberately simple PostgreSQL for the demo. sclorg image runs under
+# OpenShift's restricted-v2 SCC without UID pinning (the Bitnami subcharts the
+# OpenFGA chart bundles do NOT — never enable them on OpenShift).
+# emptyDir storage: survives container restarts, not pod deletion; the store
+# bootstrap is idempotent and the model/tuples live in git, so recovery is
+# `make openfga`.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: openfga
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: quay.io/sclorg/postgresql-16-c9s:latest
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRESQL_USER
+              value: openfga
+            - name: POSTGRESQL_DATABASE
+              value: openfga
+            - name: POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: openfga-postgres # created by install script, not in git
+                  key: password
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/pgsql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "openfga"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: openfga
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

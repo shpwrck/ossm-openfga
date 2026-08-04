@@ -1,0 +1,25 @@
+name: model-test
+
+on:
+  push:
+    branches: [main]
+    paths: ["model/**", ".github/workflows/model-test.yml"]
+  pull_request:
+    paths: ["model/**", ".github/workflows/model-test.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  fga-model-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install fga CLI
+        run: |
+          VER=$(curl -s https://api.github.com/repos/openfga/cli/releases/latest | grep -oP '"tag_name": "\Kv[0-9.]+')
+          curl -sL "https://github.com/openfga/cli/releases/download/${VER}/fga_${VER#v}_linux_amd64.tar.gz" | tar xz fga
+          sudo mv fga /usr/local/bin/fga
+          fga --version
+      - name: Test the authorization model
+        run: fga model test --tests model/store.fga.yaml

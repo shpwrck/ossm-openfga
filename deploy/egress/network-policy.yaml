@@ -1,0 +1,37 @@
+# Closes the bypass. Istio cannot force traffic through the egress gateway —
+# REGISTRY_ONLY plus this NetworkPolicy is what makes the gateway mandatory
+# rather than advisory: demo pods may only egress to DNS, the mesh control
+# plane, the egress gateway, and the authorizer.
+#
+# This is also the demo's "layers, not substitutes" argument in one manifest:
+# NetworkPolicy stays as the coarse L3/L4 backstop; the per-identity,
+# per-host decisions live in OpenFGA.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-through-gateway-only
+  namespace: demo
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to: # cluster DNS
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+    - to: # istiod (xDS, certs)
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+    - to: # the sanctioned exit
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-egress
+    - to: # ext_authz bridge + OpenFGA (sidecars call the authorizer)
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openfga
+    - to: # east-west inside the demo namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: demo

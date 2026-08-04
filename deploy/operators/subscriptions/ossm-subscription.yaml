@@ -1,0 +1,16 @@
+# OpenShift Service Mesh 3 operator (Sail-operator lineage).
+# channel `stable` currently resolves to servicemeshoperator3.v3.4.x (Istio 1.30).
+# NOTE: on OCP 4.19+ the cluster ingress operator may have installed this
+# subscription already (it backs the openshift-default GatewayClass) — the
+# install script tolerates an existing subscription.
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: servicemeshoperator3
+  namespace: openshift-operators
+spec:
+  channel: stable
+  installPlanApproval: Automatic
+  name: servicemeshoperator3
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

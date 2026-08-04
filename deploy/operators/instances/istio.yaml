@@ -1,0 +1,27 @@
+# The mesh control plane. OSSM 3 replaced the OSSM 2 ServiceMeshControlPlane
+# with this Istio CR (Sail operator); IstioOperator-style meshConfig lives
+# under spec.values.meshConfig.
+apiVersion: sailoperator.io/v1
+kind: Istio
+metadata:
+  name: default
+spec:
+  namespace: istio-system
+  updateStrategy:
+    type: InPlace
+  values:
+    meshConfig:
+      accessLogFile: /dev/stdout
+      # Registers the OpenFGA bridge as an external authorizer. Registration
+      # alone enforces nothing — enforcement starts when an AuthorizationPolicy
+      # with `action: CUSTOM` names this provider (chapters 3 and 5).
+      extensionProviders:
+        - name: openfga-ext-authz
+          envoyExtAuthzGrpc:
+            service: ext-authz-bridge.openfga.svc.cluster.local
+            port: 9191
+            # failOpen defaults to false: if the bridge is down, requests are
+            # DENIED. That is the correct default for an authorization demo.
+      # outboundTrafficPolicy is patched to REGISTRY_ONLY by `make egress`
+      # (walkthrough chapter 5) — kept permissive until then so chapters 1-4
+      # work without the egress machinery.

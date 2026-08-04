@@ -1,0 +1,68 @@
+site_name: "OpenFGA on OpenShift: Mesh, Ingress, Egress"
+site_description: >-
+  A self-guided demonstration of OpenFGA fine-grained authorization enforced by
+  OpenShift Service Mesh and Red Hat Connectivity Link.
+site_url: https://shpwrck.github.io/ossm-openfga/
+repo_url: https://github.com/shpwrck/ossm-openfga
+repo_name: shpwrck/ossm-openfga
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.footer
+    - content.code.copy
+    - content.code.annotate
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      check_paths: true
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Welcome: index.md
+  - Concepts:
+      - What is OpenFGA?: concepts/openfga-101.md
+      - What is Service Mesh?: concepts/ossm-101.md
+      - What is Connectivity Link?: concepts/rhcl-101.md
+      - How they fit together: concepts/architecture.md
+  - Walkthrough:
+      - 0. Prerequisites: walkthrough/00-prerequisites.md
+      - 1. Install the operators: walkthrough/01-operators.md
+      - 2. Deploy OpenFGA: walkthrough/02-openfga.md
+      - 3. Authz in the mesh: walkthrough/03-mesh.md
+      - 4. Authz at ingress: walkthrough/04-ingress.md
+      - 5. Authz at egress: walkthrough/05-egress.md
+      - 6. vs NetworkPolicy (stretch): walkthrough/06-netpol-comparison.md
+  - Reference:
+      - Decisions: reference/decisions.md
+      - Research notes: reference/research-notes.md
+      - Troubleshooting: reference/troubleshooting.md

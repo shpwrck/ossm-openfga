@@ -1,0 +1,24 @@
+# Values for the official OpenFGA Helm chart (https://openfga.github.io/helm-charts).
+# Secrets (datastore URI, preshared API token) are passed via --set by
+# scripts/install-openfga.sh from install-time-generated Secrets — never from
+# this file. The chart's own securityContexts are empty, so it runs under
+# restricted-v2 as-is.
+replicaCount: 1
+
+image:
+  # chart default tag trails releases and uses pullPolicy Always — pin for
+  # reproducibility
+  tag: v1.18.2
+
+datastore:
+  engine: postgres
+  # uri injected at install time (--set datastore.uri=...)
+
+# migrations run as a chart hook Job before the server starts
+
+telemetry:
+  metrics:
+    enabled: true
+
+playground:
+  enabled: false

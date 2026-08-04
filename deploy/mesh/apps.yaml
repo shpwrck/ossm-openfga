@@ -1,0 +1,208 @@
+# The demo application: four echo services under DISTINCT ServiceAccounts —
+# the SA is what gives each workload its own SPIFFE identity, and therefore its
+# own subject in OpenFGA. Each pod has:
+#   app   — a tiny Python HTTP server answering with its service name
+#   debug — a ubi-minimal shell with curl, used by the walkthrough to make
+#           calls *as* that workload's identity
+#
+# The containers are identical across services on purpose: all the demo's
+# behavior differences come from identity and tuples, not code.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: storefront
+  namespace: demo
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: orders
+  namespace: demo
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: payments
+  namespace: demo
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: inventory
+  namespace: demo
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: echo-server
+  namespace: demo
+data:
+  server.py: |
+    import http.server, json, os
+    name = os.environ.get("SERVICE_NAME", "unknown")
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = json.dumps({"service": name, "path": self.path}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+        def log_message(self, *args):
+            pass
+    http.server.ThreadingHTTPServer(("", 8080), H).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storefront
+  namespace: demo
+  labels: {app: storefront}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: storefront}
+  template:
+    metadata:
+      labels: {app: storefront}
+    spec:
+      serviceAccountName: storefront
+      volumes:
+        - name: echo-server
+          configMap: {name: echo-server}
+      containers:
+        - name: app
+          image: registry.access.redhat.com/ubi9/python-312:latest
+          command: ["python3", "/opt/echo/server.py"]
+          env: [{name: SERVICE_NAME, value: storefront}]
+          ports: [{containerPort: 8080}]
+          volumeMounts: [{name: echo-server, mountPath: /opt/echo}]
+        - name: debug
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+          command: ["sleep", "infinity"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: storefront
+  namespace: demo
+  labels: {app: storefront}
+spec:
+  selector: {app: storefront}
+  ports: [{port: 8080, targetPort: 8080, name: http}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders
+  namespace: demo
+  labels: {app: orders}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: orders}
+  template:
+    metadata:
+      labels: {app: orders}
+    spec:
+      serviceAccountName: orders
+      volumes:
+        - name: echo-server
+          configMap: {name: echo-server}
+      containers:
+        - name: app
+          image: registry.access.redhat.com/ubi9/python-312:latest
+          command: ["python3", "/opt/echo/server.py"]
+          env: [{name: SERVICE_NAME, value: orders}]
+          ports: [{containerPort: 8080}]
+          volumeMounts: [{name: echo-server, mountPath: /opt/echo}]
+        - name: debug
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+          command: ["sleep", "infinity"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders
+  namespace: demo
+  labels: {app: orders}
+spec:
+  selector: {app: orders}
+  ports: [{port: 8080, targetPort: 8080, name: http}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments
+  namespace: demo
+  labels: {app: payments}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: payments}
+  template:
+    metadata:
+      labels: {app: payments}
+    spec:
+      serviceAccountName: payments
+      volumes:
+        - name: echo-server
+          configMap: {name: echo-server}
+      containers:
+        - name: app
+          image: registry.access.redhat.com/ubi9/python-312:latest
+          command: ["python3", "/opt/echo/server.py"]
+          env: [{name: SERVICE_NAME, value: payments}]
+          ports: [{containerPort: 8080}]
+          volumeMounts: [{name: echo-server, mountPath: /opt/echo}]
+        - name: debug
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+          command: ["sleep", "infinity"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payments
+  namespace: demo
+  labels: {app: payments}
+spec:
+  selector: {app: payments}
+  ports: [{port: 8080, targetPort: 8080, name: http}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory
+  namespace: demo
+  labels: {app: inventory}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: inventory}
+  template:
+    metadata:
+      labels: {app: inventory}
+    spec:
+      serviceAccountName: inventory
+      volumes:
+        - name: echo-server
+          configMap: {name: echo-server}
+      containers:
+        - name: app
+          image: registry.access.redhat.com/ubi9/python-312:latest
+          command: ["python3", "/opt/echo/server.py"]
+          env: [{name: SERVICE_NAME, value: inventory}]
+          ports: [{containerPort: 8080}]
+          volumeMounts: [{name: echo-server, mountPath: /opt/echo}]
+        - name: debug
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+          command: ["sleep", "infinity"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory
+  namespace: demo
+  labels: {app: inventory}
+spec:
+  selector: {app: inventory}
+  ports: [{port: 8080, targetPort: 8080, name: http}]

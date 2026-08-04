@@ -1,0 +1,25 @@
+# local site build
+site/
+.cache/
+
+# python venv for mkdocs
+.venv/
+
+# editor / OS noise
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# local scratch — anything cluster-specific stays out of the public repo
+*.kubeconfig
+kubeconfig*
+.env
+.env.*
+local/
+
+# repo-local tool downloads
+bin/
+
+# build artifacts
+ext-authz/ext-authz

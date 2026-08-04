@@ -1,0 +1,7 @@
+# Required on OpenShift. metadata.name MUST be `default`.
+apiVersion: sailoperator.io/v1
+kind: IstioCNI
+metadata:
+  name: default
+spec:
+  namespace: istio-cni
