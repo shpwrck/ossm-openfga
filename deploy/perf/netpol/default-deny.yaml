@@ -1,0 +1,12 @@
+# Scoped default-deny: isolate the fortio server (and only it) so the
+# allow-client policy below is what admits traffic. Applied by run-perf.sh for
+# the netpol cases; absent for the no-policy baseline.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: perf-default-deny
+  namespace: perf
+spec:
+  podSelector:
+    matchLabels: {app: fortio-server}
+  policyTypes: [Ingress]

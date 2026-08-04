@@ -36,6 +36,14 @@ protect.
   `ingress-demo/api-key-{alice,bob}`.
 - OpenFGA store `ossm-openfga-demo`; the id is a runtime ULID — discover it
   by name (`bin/fga store list` via port-forward), never hardcode it.
+- **Perf arenas (2026-08-04 perf run, VALIDATION.md pass 3):** namespaces
+  `perf` (plain pods) and `perf-mesh` (injected, STRICT mTLS) from
+  `deploy/perf/`, plus the tuple
+  `workload:perf-mesh/fortio-client can_call service:fortio-server` in the
+  store. All background scale objects (5000 NetworkPolicies, 10k tuples) were
+  created and removed by the harness; steady state is just the two arenas.
+  Remove with `./scripts/run-perf.sh teardown` (results stay in the
+  gitignored `perf-results/`).
 
 ### Template map
 
@@ -68,6 +76,9 @@ protect.
 - Egress: payments → `http://httpbingo.org/get` 200; storefront → 403;
   `example.com` → 502 (`REGISTRY_ONLY`).
 - Every authorization decision: `oc -n openfga logs deploy/ext-authz-bridge`.
+- Perf harness healthy: `./scripts/run-perf.sh setup` ends with "arenas
+  ready"; a full re-measure is `make perf` (~30 min; phases resume, so a
+  fresh run needs a fresh `PERF_RESULTS_DIR` or an empty `perf-results/latest`).
 - Recover from any wedged state: `make clean` (removes demo namespaces,
   restores `ALLOW_ANY`, deregisters the extensionProvider), then re-run the
   phases — or simply let the ephemeral cluster expire.
@@ -89,6 +100,13 @@ protect.
   screenshots is expected and fine.
 - **Ingress allow/deny was verified manually from outside the cluster** via
   the ELB; the script's smoke coverage ends at printing the commands.
+- **Perf numbers in chapter 6 are from THIS cluster** (pass 3): 2 × m6a.xlarge
+  is the reference environment those tables cite. Re-measuring on a different
+  shape belongs in a new results section, not an edit of the existing numbers.
+- **Propagation is measured in-pod on one clock** (probe scripts in
+  `deploy/perf/probes/`, RBAC-scoped to the one policy in `perf`) — chosen
+  over kube-burner to measure observed *enforcement* without cross-host clock
+  skew; resolution caveats are documented in the chapter.
 
 ### How to drive it
 

@@ -29,7 +29,7 @@ egress: ## Egress gateway + authz for outbound traffic via OpenFGA
 	./scripts/install-egress.sh
 
 .PHONY: perf
-perf: ## (Stretch) NetworkPolicy-vs-OpenFGA comparison harness
+perf: ## NetworkPolicy-vs-OpenFGA comparison harness (walkthrough ch. 6)
 	./scripts/run-perf.sh
 
 .PHONY: demo

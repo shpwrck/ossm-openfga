@@ -1,0 +1,16 @@
+# Two arenas, one per enforcement technology:
+#   perf      — plain pods, no sidecars: the NetworkPolicy side of the
+#               comparison (baseline + netpol cases, netpol scale tests)
+#   perf-mesh — sidecar-injected, STRICT mTLS: the mesh side (mesh baseline
+#               and mesh+ext_authz cases, tuple propagation/scale tests)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: perf
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: perf-mesh
+  labels:
+    istio-injection: enabled

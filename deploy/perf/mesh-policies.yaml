@@ -1,0 +1,23 @@
+# Same mesh posture as the demo namespace (chapter 3): every request must
+# carry a verifiable SPIFFE identity, and the sidecars must be able to reach
+# the ext_authz bridge or the fail-closed CUSTOM policy denies everything.
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: strict-mtls
+  namespace: perf-mesh
+spec:
+  mtls:
+    mode: STRICT
+---
+apiVersion: networking.istio.io/v1
+kind: Sidecar
+metadata:
+  name: default
+  namespace: perf-mesh
+spec:
+  egress:
+    - hosts:
+        - "./*"            # client → server inside the arena
+        - "istio-system/*" # control plane
+        - "openfga/*"      # ext_authz bridge + OpenFGA API (tuple probe)

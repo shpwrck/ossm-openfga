@@ -1,0 +1,11 @@
+# The perf harness arenas (chapter 6). authorization-policy.yaml and netpol/
+# are deliberately NOT listed — run-perf.sh toggles them per measurement case.
+# The perf-probes ConfigMaps are projected into both namespaces from probes/
+# by run-perf.sh (same script content, two namespaces).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - fortio.yaml
+  - mesh-policies.yaml
+  - probe-rbac.yaml

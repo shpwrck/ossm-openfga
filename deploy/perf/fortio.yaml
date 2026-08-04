@@ -1,0 +1,161 @@
+# Fortio load generator + echo server, one pair per arena. The client pod
+# carries a `debug` container (ubi-minimal + curl) that runs the in-pod
+# propagation probes — measuring policy-apply→enforcement on a SINGLE clock
+# (the pod's), so no cross-host clock skew enters the numbers.
+#
+# The client is anti-affine to the server so every measured request crosses
+# nodes — the realistic (and worst) case, and consistent across all cases.
+#
+# ── perf (no sidecars) ──────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fortio-client
+  namespace: perf
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fortio-server
+  namespace: perf
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fortio-server
+  namespace: perf
+  labels: {app: fortio-server}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: fortio-server}
+  template:
+    metadata:
+      labels: {app: fortio-server}
+    spec:
+      serviceAccountName: fortio-server
+      containers:
+        - name: fortio
+          image: fortio/fortio:latest_release
+          args: ["server", "-http-port", "8080"]
+          ports: [{containerPort: 8080, name: http}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fortio-server
+  namespace: perf
+  labels: {app: fortio-server}
+spec:
+  selector: {app: fortio-server}
+  ports: [{port: 8080, targetPort: 8080, name: http}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fortio-client
+  namespace: perf
+  labels: {app: fortio-client}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: fortio-client}
+  template:
+    metadata:
+      labels: {app: fortio-client}
+    spec:
+      serviceAccountName: fortio-client
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels: {app: fortio-server}
+              topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: probe
+          configMap: {name: perf-probes, defaultMode: 0755}
+      containers:
+        - name: fortio
+          image: fortio/fortio:latest_release
+          args: ["server", "-http-port", "8081", "-redirect-port", "disabled"]
+        - name: debug
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+          command: ["sleep", "infinity"]
+          volumeMounts: [{name: probe, mountPath: /probe}]
+---
+# ── perf-mesh (sidecars, STRICT mTLS) ───────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fortio-client
+  namespace: perf-mesh
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fortio-server
+  namespace: perf-mesh
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fortio-server
+  namespace: perf-mesh
+  labels: {app: fortio-server}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: fortio-server}
+  template:
+    metadata:
+      labels: {app: fortio-server}
+    spec:
+      serviceAccountName: fortio-server
+      containers:
+        - name: fortio
+          image: fortio/fortio:latest_release
+          args: ["server", "-http-port", "8080"]
+          ports: [{containerPort: 8080, name: http}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fortio-server
+  namespace: perf-mesh
+  labels: {app: fortio-server}
+spec:
+  selector: {app: fortio-server}
+  ports: [{port: 8080, targetPort: 8080, name: http}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fortio-client
+  namespace: perf-mesh
+  labels: {app: fortio-client}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: fortio-client}
+  template:
+    metadata:
+      labels: {app: fortio-client}
+    spec:
+      serviceAccountName: fortio-client
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels: {app: fortio-server}
+              topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: probe
+          configMap: {name: perf-probes, defaultMode: 0755}
+      containers:
+        - name: fortio
+          image: fortio/fortio:latest_release
+          args: ["server", "-http-port", "8081", "-redirect-port", "disabled"]
+        - name: debug
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+          command: ["sleep", "infinity"]
+          volumeMounts: [{name: probe, mountPath: /probe}]

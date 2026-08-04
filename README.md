@@ -15,8 +15,9 @@ demo is a relationship query against the same OpenFGA store — which is the poi
 authorization policy as *data* you can query, audit, and change at runtime, instead
 of policy scattered across NetworkPolicies, RBAC rules, and app code.
 
-**Stretch goal:** a performance comparison against Kubernetes `NetworkPolicy` at
-scale — propagation latency and resource cost as policy count grows.
+**Measured:** a performance comparison against Kubernetes `NetworkPolicy` at
+scale — per-request overhead, propagation latency, and resource cost as policy
+count grows (`make perf`; results in walkthrough chapter 6).
 
 ## Start here
 

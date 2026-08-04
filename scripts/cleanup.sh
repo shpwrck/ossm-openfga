@@ -19,7 +19,7 @@ print(json.dumps([p for p in providers if p.get("name") != "openfga-ext-authz"])
   -p "{\"spec\":{\"values\":{\"meshConfig\":{\"extensionProviders\":${remaining}}}}}" 2>/dev/null || true
 
 helm uninstall openfga -n openfga 2>/dev/null || true
-for ns in demo ingress-demo istio-egress openfga; do
+for ns in demo ingress-demo istio-egress openfga perf perf-mesh; do
   oc delete namespace "$ns" --ignore-not-found
 done
 ok "demo removed (operators left installed)"

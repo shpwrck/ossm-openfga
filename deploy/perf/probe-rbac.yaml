@@ -1,0 +1,27 @@
+# The in-pod propagation probe creates and deletes ONE NetworkPolicy against
+# the kube API from inside the client pod, so that "policy accepted" and
+# "policy enforced" are read off the same clock. This is the entire blast
+# radius: networkpolicies, in the perf namespace only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: netpol-probe
+  namespace: perf
+rules:
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["create", "delete", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: netpol-probe
+  namespace: perf
+subjects:
+  - kind: ServiceAccount
+    name: fortio-client
+    namespace: perf
+roleRef:
+  kind: Role
+  name: netpol-probe
+  apiGroup: rbac.authorization.k8s.io

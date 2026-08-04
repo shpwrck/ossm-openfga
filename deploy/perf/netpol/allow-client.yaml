@@ -1,0 +1,20 @@
+# The one policy whose creation/deletion the propagation probe times. Kept
+# byte-identical to the JSON embedded in probes/measure-netpol.sh — the probe
+# creates it via the API; this file exists for the overhead case and for the
+# reader.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: perf-allow-client
+  namespace: perf
+spec:
+  podSelector:
+    matchLabels: {app: fortio-server}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: fortio-client}
+      ports:
+        - port: 8080
+          protocol: TCP

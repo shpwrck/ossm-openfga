@@ -67,7 +67,7 @@ nav:
       - 3. Authz in the mesh: walkthrough/03-mesh.md
       - 4. Authz at ingress: walkthrough/04-ingress.md
       - 5. Authz at egress: walkthrough/05-egress.md
-      - 6. vs NetworkPolicy (stretch): walkthrough/06-netpol-comparison.md
+      - 6. vs NetworkPolicy, measured: walkthrough/06-netpol-comparison.md
   - Reference:
       - Decisions: reference/decisions.md
       - Research notes: reference/research-notes.md
