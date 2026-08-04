@@ -1,10 +1,16 @@
 # On-cluster validation report
 
-**Date:** 2026-08-04
-**Result: all five phases pass end-to-end** (`make operators → openfga → mesh
-→ ingress → egress`), each proving both its allow and its deny path.
+Two passes, both fully green (`make operators → openfga → mesh → ingress →
+egress`, each phase proving both its allow and its deny path):
 
-## Environment
+- **Pass 1 (2026-08-04) — coexistence:** a cluster already running the OSSM
+  operator and a multi-cluster mesh; exercised the adoption branches.
+- **Pass 2 (2026-08-04) — blank cluster:** a pristine ROSA cluster (issue #2);
+  exercised the fresh-install branches. **Zero script changes needed.**
+
+## Pass 1 — coexistence with a pre-existing mesh
+
+### Environment
 
 - OpenShift 4.21 (Kubernetes 1.34), single node, bare metal (no LoadBalancer
   implementation)
@@ -16,7 +22,7 @@
 - RHCL 1.4.2 installed by this repo's scripts during the run
 - OpenFGA v1.18.2 via the official Helm chart; bridge image from ghcr
 
-## What each phase proved
+### What each phase proved
 
 | Phase | Allow path | Deny path |
 |---|---|---|
@@ -25,7 +31,7 @@
 | ingress (mesh hop) | bridge logs `allow workload:ingress-demo/demo-gw-istio can_call service:storefront` — the researched SA convention is correct | — |
 | egress | `payments → httpbingo.org` 200 through the gateway, bridge logs `allow workload:demo/payments can_reach host:httpbingo.org` — **original identity preserved across the `ISTIO_MUTUAL` hop** | `storefront → httpbingo.org` 403; `example.com` unroutable (`REGISTRY_ONLY`) |
 
-## Findings and fixes (in run order)
+### Findings and fixes (in run order)
 
 1. **`wait_csv` assumed the Subscription outlives the install.** This cluster
    prunes Subscription objects (governance-style pinning) after OLM has
@@ -72,11 +78,50 @@ Confirmed-as-researched (no change needed): OpenFGA Helm `--set` keys; the
 `body.expression` and `patternMatching` predicates; gateway-injection egress
 gateway; `REGISTRY_ONLY` + NetworkPolicy bypass closure; fail-closed ext_authz.
 
-## Not validated here
+## Pass 2 — blank cluster (ROSA, issue #2)
 
-- **The blank-cluster path** of `install-operators.sh` (this cluster already
-  had the OSSM operator and a mesh). The branch is unchanged from the
-  researched shape minus the revision-tag removal, but has not run end-to-end
-  on a pristine cluster since these changes.
+A single unattended `make demo` on a pristine cluster: no OSSM operator, no
+mesh, no Kuadrant, no demo namespaces. **All five phases passed on the first
+run, unmodified — total wall time ~3.5 minutes** (OSSM CSV created
+15:42:46Z, egress smoke test green 15:45:47Z).
+
+### Environment
+
+- OpenShift 4.20.30 (Kubernetes 1.33) on ROSA — AWS, two worker nodes, with
+  a real LoadBalancer implementation (unlike pass 1)
+- OSSM operator 3.4.1 and RHCL 1.4.2 installed **fresh from OLM
+  subscriptions** by `install-operators.sh` (the untested branch)
+- Istio **v1.30.3** from the fresh `Istio` CR — the operator's current
+  default, newer than pass 1's adopted v1.28.5, so the demo is proven across
+  both versions
+- OpenFGA v1.18.2 via Helm chart 0.3.10
+
+### What each phase proved (beyond pass 1)
+
+| Phase | Blank-cluster branch exercised |
+|---|---|
+| operators | Fresh `servicemeshoperator3` + `rhcl-operator` Subscriptions → CSVs `Succeeded`; fresh `IstioCNI` + `Istio` applies → both `Ready`. **The IstioRevisionTag removal is correct on a blank cluster too**: one `IstioRevision` named `default`, no tag, and `istio-injection: enabled` injects sidecars via the revision name. |
+| openfga | Fresh store created (no adopt-existing branch): `created store 01KZ6Q5ZZBH2R6DT90KK1K0Y1H`, model + tuples written, live checks verified. `enroll_discovery` correctly no-ops (the fresh CR sets no `discoverySelectors`). |
+| mesh | Same allow/deny as pass 1 (`storefront → orders` 200, `storefront → payments` 403), now with the `deploy/mesh/sidecar.yaml` override applied to a pristine mesh — harmless, as predicted in pass 1 finding 5. |
+| ingress | **The LoadBalancer branch ran for the first time**: `Gateway` reached `Accepted=True` *and* `Programmed=True`, `status.addresses[0]` carried the AWS ELB hostname, no NodePort fallback. Verified via the ELB from outside the cluster: no key 401, bob `/` 200, bob `/admin` 403 (OpenFGA deny), alice `/admin` 200; bridge logged the mesh hop `allow workload:ingress-demo/demo-gw-istio can_call service:storefront`. |
+| egress | Same allow/deny as pass 1: `payments → httpbingo.org` 200 (bridge logs the original workload identity across the `ISTIO_MUTUAL` hop), `storefront → httpbingo.org` 403, unregistered `example.com` 502 (`REGISTRY_ONLY` black-hole). |
+
+### Findings
+
+No script or manifest changes were needed — every pass-1 coexistence
+accommodation (CSV fallback, adopt-vs-apply, discovery enrollment, Sidecar
+override, NodePort fallback) proved to be a clean no-op on the blank path.
+Observations worth keeping:
+
+1. **ELB DNS lags Gateway `Programmed`.** The Gateway is `Programmed` with an
+   address as soon as AWS assigns the ELB hostname, but public DNS for it took
+   another ~2 minutes to resolve. `install-ingress.sh` only prints the try-it
+   commands, so nothing failed — just expect the first curl to wait.
+2. **The unregistered-host code under `REGISTRY_ONLY` is 502** (Envoy
+   BlackHoleCluster) on this cluster; the smoke test's "anything but 200"
+   check is the right shape.
+
+## Not validated
+
 - **Chapter 6** (NetworkPolicy comparison harness) — still a stretch goal.
 - `TLSPolicy`/`DNSPolicy` (deliberately out of scope).
