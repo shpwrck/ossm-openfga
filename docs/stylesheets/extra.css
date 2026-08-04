@@ -1,12 +1,14 @@
 /* The three enforcement-plane cards on the welcome page: three equal columns
    when the viewport has room, a single stacked column otherwise — never the
-   default auto-fit's uneven 2+1 wrap. */
-.md-typeset .grid.cards.three-planes > ul {
+   default auto-fit's uneven 2+1 wrap.
+   Note: the theme defines grid-template-columns on the .grid DIV itself (the
+   inner ul is display: contents), so the override must target the div. */
+.md-typeset .grid.three-planes {
   grid-template-columns: repeat(3, 1fr);
 }
 
 @media screen and (max-width: 44.9375em) {
-  .md-typeset .grid.cards.three-planes > ul {
+  .md-typeset .grid.three-planes {
     grid-template-columns: 1fr;
   }
 }
