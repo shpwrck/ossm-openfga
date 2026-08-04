@@ -121,7 +121,29 @@ Observations worth keeping:
    BlackHoleCluster) on this cluster; the smoke test's "anything but 200"
    check is the right shape.
 
+## Pass 3 — perf harness (chapter 6) on the ROSA cluster
+
+Run 2026-08-04 on the same pristine ROSA cluster as pass 2 (2 × m6a.xlarge,
+OpenShift 4.20 / Kubernetes 1.33), after `make demo`. Full matrix green:
+`run-perf.sh setup → overhead → netpol-scale → tuple-scale → report`, zero
+non-200s across ~132k measured requests. Headline numbers (details and
+methodology in `docs/walkthrough/06-netpol-comparison.md`):
+
+- Per-request p50: base 0.64 ms = netpol 0.64 ms; mesh 1.27 ms; mesh+ext_authz
+  2.56 ms (the OpenFGA Check adds ~1.3 ms p50 at 100 QPS, ~1.8 ms at 1000 QPS;
+  bridge-observed Check p50 1 ms).
+- NetworkPolicy apply→enforced: ~65 ms flat to N=1000 background policies,
+  177 ms at N=5000; bulk delete of 5000 took 210 s; ovnkube-node grew
+  19 m/377 MiB → 66 m/657 MiB per node.
+- OpenFGA tuple write→enforced: ~12 ms, flat from seed to +10,000 tuples;
+  10k tuples written in 14 s, deleted in 13 s.
+
+Findings during harness bring-up (both fixed in the harness itself): the
+fortio client needs `-redirect-port disabled` (its default https redirector
+collides with a second server on 8081), and OSSM 3 injects `istio-proxy` as a
+**native sidecar** (`spec.initContainers`) — anything asserting on
+`spec.containers` alone misses it.
+
 ## Not validated
 
-- **Chapter 6** (NetworkPolicy comparison harness) — still a stretch goal.
 - `TLSPolicy`/`DNSPolicy` (deliberately out of scope).

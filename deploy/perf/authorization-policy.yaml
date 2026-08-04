@@ -1,0 +1,17 @@
+# The mesh+ext_authz case: delegate the fortio server's inbound requests to
+# the OpenFGA bridge. NOT in kustomization.yaml — run-perf.sh applies this for
+# the mesh_fga case and removes it for the plain-mesh case, so the same pair
+# of pods measures both sides of the ext_authz overhead.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: openfga-perf-authz
+  namespace: perf-mesh
+spec:
+  selector:
+    matchLabels: {app: fortio-server}
+  action: CUSTOM
+  provider:
+    name: openfga-ext-authz
+  rules:
+    - {}

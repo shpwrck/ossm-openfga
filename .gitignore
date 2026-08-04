@@ -21,5 +21,11 @@ local/
 # repo-local tool downloads
 bin/
 
+# raw perf harness output (curated numbers live in the docs)
+perf-results/
+
 # build artifacts
 ext-authz/ext-authz
+
+# python bytecode
+__pycache__/
