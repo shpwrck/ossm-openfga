@@ -186,6 +186,74 @@ if nd.is_dir():
             f"p50={r['p50']:.2f} ms, p99={r['p99']:.2f} ms — compare the netpol "
             f"row of the 100 QPS table: per-request cost does not grow with N.\n")
 
+# ── ipBlock.except sweep ────────────────────────────────────────────────────
+EXCEPT_LAYOUTS = [
+    ("netpol-except",
+     "scattered excepts (stride-32 /28s — every except punches its own hole)"),
+    ("netpol-except-contiguous",
+     "contiguous excepts (adjacent /28s — they aggregate away)"),
+]
+if any((ROOT / d).is_dir() for d, _ in EXCEPT_LAYOUTS):
+    say("## ipBlock.except: OpenFlow flow inflation\n")
+    say("Each `except` entry becomes a `!=` in the OVN ACL match. OVN "
+        "compiles `cidr − excepts` into positive complement CIDRs, so the "
+        "OpenFlow cost tracks the complement's *piece count* — scattered "
+        "excepts cost flows per except, contiguous ones collapse. Flow "
+        "counts are `ovs-ofctl dump-aggregate br-int`, max-node delta vs "
+        "the empty-namespace baseline.\n")
+
+
+def flows_by_node(path: Path):
+    out = {}
+    if path.exists():
+        for line in path.read_text().splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[1].isdigit():
+                out[parts[0]] = int(parts[1])
+    return out
+
+
+def except_combo_key(d: Path):
+    m = re.fullmatch(r"combo-(sel|K(\d+))-N(\d+)", d.name)
+    if not m:
+        return None
+    k = -1 if m.group(1) == "sel" else int(m.group(2))
+    return (int(m.group(3)), k)
+
+
+for dirname, label in EXCEPT_LAYOUTS:
+    xd = ROOT / dirname
+    if not xd.is_dir():
+        continue
+    say(f"### {label}\n")
+    base_flows = flows_by_node(xd / "baseline-flows.txt")
+    combos = sorted((d for d in xd.glob("combo-*") if except_combo_key(d)),
+                    key=except_combo_key)
+    say("| policies | rule style | ovs flows (Δ max node) | allow: apply→enforced "
+        "| ovn-controller max cpu/mem | bulk delete |")
+    say("|---|---|---|---|---|---|")
+    for d in combos:
+        n, k = except_combo_key(d)
+        style = "label selector" if k < 0 else (
+            "ipBlock, no except" if k == 0 else f"ipBlock + {k} excepts")
+        fl = flows_by_node(d / "flows.txt")
+        delta = max((fl[nd_] - base_flows.get(nd_, 0) for nd_ in fl), default=None)
+        t = top_max(d / "top-ovn-containers.txt", r"\S+\s+ovn-controller")
+        dt = count_time(d / "delete-time.txt")
+        say(f"| {n} | {style} | "
+            + (f"+{delta:,}" if delta is not None else "—") + " | "
+            + trange(trials(d / "trials-apply.txt"), "ms") + " | "
+            + (f"{t[0]}m/{t[1]}Mi" if t else "—") + " | "
+            + (f"{dt[0]} in {dt[1]}s" if dt else "—") + " |")
+    say("")
+    if base_flows:
+        say("Baseline br-int flows per node: "
+            + ", ".join(f"{k} {v:,}" for k, v in sorted(base_flows.items()))
+            + ".\n")
+    fw = count_time(xd / "final-wipe-time.txt")
+    if fw:
+        say(f"Final wipe of {fw[0]} except-style policies: {fw[1]}s.\n")
+
 td = ROOT / "tuple-scale"
 if td.is_dir():
     say("## Policy propagation: OpenFGA tuple write\n")

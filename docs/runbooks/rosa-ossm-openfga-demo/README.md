@@ -107,6 +107,14 @@ protect.
   `deploy/perf/probes/`, RBAC-scoped to the one policy in `perf`) — chosen
   over kube-burner to measure observed *enforcement* without cross-host clock
   skew; resolution caveats are documented in the chapter.
+- **The `except` sweep ran twice, once per layout** (`PERF_EXCEPT_LAYOUT`),
+  because except *placement* — not count — sets the OpenFlow cost
+  (2 × complement pieces/policy). Flow counts come from `ovs-ofctl
+  dump-aggregate br-int` via the `ovn-controller` container of the
+  ovnkube-node pods. Trust only except policies whose live object shows the
+  excepts (`oc get netpol … -o jsonpath='{...ipBlock.except}'`) — the API
+  silently prunes a mis-indented `except`, and the harness read-back-asserts
+  this after every batch.
 
 ### How to drive it
 
