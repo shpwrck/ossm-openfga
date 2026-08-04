@@ -94,6 +94,6 @@ the demo's namespaces and mesh configuration on the operator's lab cluster
 - Never write cluster URLs, node IPs, or kubeconfig content into this repo
   (public); the `hub` context name is the only cluster reference allowed.
 - When tuples change, keep `make model-test` green in the same change.
-- The one remaining unvalidated path is a truly blank cluster (this one had
-  the operator + mesh pre-installed); treat first-run-on-fresh-cluster
-  reports accordingly.
+- The blank-cluster path this cluster could not exercise has since been
+  validated on a pristine ROSA cluster (VALIDATION.md pass 2, issue #2;
+  see `docs/runbooks/rosa-ossm-openfga-demo/`).
