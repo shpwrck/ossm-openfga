@@ -16,6 +16,7 @@ if oc -n openshift-operators get subscription servicemeshoperator3 >/dev/null 2>
   wait_csv openshift-operators servicemeshoperator3
 elif oc -n openshift-operators get csv -o name 2>/dev/null | grep -q servicemeshoperator3; then
   info "OSSM operator already installed without a subscription — leaving it as-is"
+  wait_csv openshift-operators servicemeshoperator3 # CSV-name fallback covers the missing subscription
 else
   oc apply -f "$REPO_ROOT/deploy/operators/subscriptions/ossm-subscription.yaml"
   wait_csv openshift-operators servicemeshoperator3

@@ -10,7 +10,7 @@ What it does, and why — worth reading while it runs (~5 minutes):
 
 ## Service Mesh 3
 
-Two OLM objects and three custom resources:
+One OLM object and two custom resources:
 
 ```yaml title="deploy/operators/subscriptions/ossm-subscription.yaml"
 --8<-- "deploy/operators/subscriptions/ossm-subscription.yaml"
