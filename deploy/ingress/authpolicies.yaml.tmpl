@@ -4,7 +4,7 @@
 #
 # Pipeline per request: authenticate via API key -> POST an OpenFGA Check
 # (metadata.http callout) -> allow only if the response says allowed.
-# 🚧 Field shapes pending on-cluster validation against RHCL 1.4 (kuadrant.io/v1).
+# Field shapes validated on-cluster against RHCL 1.4.2 (kuadrant.io/v1).
 apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
@@ -19,6 +19,10 @@ spec:
     authentication:
       api-key-users:
         apiKey:
+          # the api-key Secrets live in ingress-demo, but Authorino resolves
+          # them relative to the generated AuthConfig in kuadrant-system —
+          # without this it only searches there (cluster-wide Authorino only)
+          allNamespaces: true
           selector:
             matchLabels:
               app: demo-api-keys
@@ -60,6 +64,10 @@ spec:
     authentication:
       api-key-users:
         apiKey:
+          # the api-key Secrets live in ingress-demo, but Authorino resolves
+          # them relative to the generated AuthConfig in kuadrant-system —
+          # without this it only searches there (cluster-wide Authorino only)
+          allNamespaces: true
           selector:
             matchLabels:
               app: demo-api-keys

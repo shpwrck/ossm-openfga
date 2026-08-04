@@ -29,14 +29,18 @@ apply_kustomize() {
   oc apply -k "$REPO_ROOT/$1"
 }
 
-# wait_csv <namespace> <subscription> — wait until the subscription's CSV succeeds
+# wait_csv <namespace> <subscription> — wait until the operator's CSV succeeds.
+# Follows subscription.status.currentCSV when the Subscription exists, but
+# falls back to matching CSVs by operator name: some clusters prune
+# Subscription objects (e.g. governance policies pinning operator versions)
+# while the already-created InstallPlan installs the CSV regardless.
 wait_csv() {
-  local ns="$1" sub="$2" csv="" i
+  local ns="$1" sub="$2" csv="" phase i
   info "waiting for operator $sub in $ns"
   for ((i = 0; i < 60; i++)); do
     csv="$(oc -n "$ns" get subscription "$sub" -o jsonpath='{.status.currentCSV}' 2>/dev/null || true)"
+    [[ -z "$csv" ]] && csv="$(oc -n "$ns" get csv -o name 2>/dev/null | grep -m1 "/$sub\." | cut -d/ -f2 || true)"
     if [[ -n "$csv" ]]; then
-      local phase
       phase="$(oc -n "$ns" get csv "$csv" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
       [[ "$phase" == "Succeeded" ]] && { ok "$csv Succeeded"; return 0; }
     fi
@@ -60,6 +64,43 @@ ensure_fga() {
   mv "$tmp/fga" "$FGA_BIN"
   rm -rf "$tmp"
   ok "fga CLI $ver -> bin/fga"
+}
+
+# enroll_discovery <namespace> — when the live mesh scopes discovery with
+# meshConfig.discoverySelectors, label the namespace so istiod can see it.
+# No-op on the default (unscoped) mesh or when there is nothing to match.
+enroll_discovery() {
+  local ns="$1" sel labels
+  sel="$(oc get istio default -o jsonpath='{.spec.values.meshConfig.discoverySelectors}' 2>/dev/null || true)"
+  [[ -z "$sel" ]] && return 0
+  labels="$(printf '%s' "$sel" | python3 -c '
+import json, sys
+sels = json.load(sys.stdin)
+ml = next((s["matchLabels"] for s in sels if s.get("matchLabels")), {})
+print(" ".join(f"{k}={v}" for k, v in ml.items()))
+')"
+  [[ -z "$labels" ]] && { info "mesh uses discoverySelectors without matchLabels — enroll $ns yourself"; return 0; }
+  info "mesh scopes discovery via discoverySelectors — labeling $ns ($labels)"
+  # shellcheck disable=SC2086
+  oc label namespace "$ns" $labels --overwrite >/dev/null
+}
+
+# ensure_extension_provider — register the openfga-ext-authz extensionProvider
+# on a PRE-EXISTING Istio CR without disturbing the rest of its spec. Other
+# providers are preserved (append, not replace); idempotent by provider name.
+ensure_extension_provider() {
+  local merged
+  merged="$(oc get istio default -o json | python3 -c '
+import json, sys
+spec = json.load(sys.stdin)["spec"]
+providers = ((spec.get("values") or {}).get("meshConfig") or {}).get("extensionProviders") or []
+if not any(p.get("name") == "openfga-ext-authz" for p in providers):
+    providers.append({"name": "openfga-ext-authz", "envoyExtAuthzGrpc": {
+        "service": "ext-authz-bridge.openfga.svc.cluster.local", "port": 9191}})
+print(json.dumps(providers))
+')"
+  oc patch istio default --type merge \
+    -p "{\"spec\":{\"values\":{\"meshConfig\":{\"extensionProviders\":${merged}}}}}"
 }
 
 # port_forward <namespace> <svc/name> <local:remote> — background port-forward,

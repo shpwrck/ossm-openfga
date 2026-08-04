@@ -1,0 +1,19 @@
+# Scope the demo namespace's sidecar config to exactly what the demo talks to.
+# On a pristine mesh this is just an optimization — but on a mesh whose root
+# namespace carries a restrictive default Sidecar (common in production and
+# multi-cluster setups) it is REQUIRED: the ext_authz provider cluster
+# (ext-authz-bridge.openfga) must be visible to every demo proxy, or the
+# fail-closed CUSTOM AuthorizationPolicy denies everything (403, flag UAEX).
+# This list is the L7 twin of deploy/egress/network-policy.yaml's L3/L4 one.
+apiVersion: networking.istio.io/v1
+kind: Sidecar
+metadata:
+  name: default
+  namespace: demo
+spec:
+  egress:
+    - hosts:
+        - "./*"            # east-west inside the demo namespace
+        - "istio-system/*" # control plane
+        - "openfga/*"      # the authorizer: ext_authz bridge + OpenFGA API
+        - "istio-egress/*" # the sanctioned exit for external traffic (chapter 5)

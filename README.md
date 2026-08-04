@@ -55,8 +55,10 @@ to verify it.
 
 ## Status
 
-🚧 Under active development. See `docs/reference/decisions.md` for the
-architecture decisions and current state.
+Core demo (chapters 1–5: operators, OpenFGA, mesh, ingress, egress) validated
+end-to-end on-cluster — see `VALIDATION.md` for the report. The NetworkPolicy
+comparison harness (chapter 6) is still a stretch goal. See
+`docs/reference/decisions.md` for the architecture decisions.
 
 This is a public demo repository: it contains no credentials, no cluster
 addresses, and no customer-specific information — keep it that way in PRs.

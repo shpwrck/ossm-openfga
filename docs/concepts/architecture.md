@@ -14,7 +14,7 @@ flowchart LR
         OR --> INV
         OR --> PAY[payments<br/><small>sa: payments</small>]
     end
-    PAY --> EXT([httpbin.org<br/>external provider])
+    PAY --> EXT([httpbingo.org<br/>external provider])
 ```
 
 Each service runs under its **own ServiceAccount** — that's what gives each one a
@@ -57,7 +57,7 @@ naming conventions, applied consistently by the enforcers:
 | Authenticated principal at the gateway (e.g. API key owner `alice`) | `user:alice` |
 | Kubernetes Service `orders.demo` | `service:orders` |
 | Route exposed at the gateway | `route:storefront`, `route:storefront-admin` |
-| External hostname | `host:httpbin.org` |
+| External hostname | `host:httpbingo.org` |
 
 These conventions are the entire "schema mapping" — there is no sync process, no
 controller reconciling Kubernetes objects into OpenFGA. The enforcers *derive*

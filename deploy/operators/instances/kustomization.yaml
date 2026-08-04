@@ -4,5 +4,4 @@ resources:
   - namespaces.yaml
   - istio-cni.yaml
   - istio.yaml
-  - istio-revision-tag.yaml
   - kuadrant.yaml

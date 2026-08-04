@@ -1,4 +1,4 @@
-# Routing that funnels mesh traffic for httpbin.org through the egress
+# Routing that funnels mesh traffic for httpbingo.org through the egress
 # gateway, with two properties that matter to the demo:
 #
 #  1. The mesh→gateway leg uses ISTIO_MUTUAL, so the ORIGINAL workload's
@@ -10,10 +10,10 @@
 apiVersion: networking.istio.io/v1
 kind: ServiceEntry
 metadata:
-  name: httpbin-org
+  name: httpbingo-org
   namespace: istio-egress
 spec:
-  hosts: [httpbin.org]
+  hosts: [httpbingo.org]
   location: MESH_EXTERNAL
   resolution: DNS
   ports:
@@ -37,7 +37,7 @@ spec:
         number: 8080
         name: http
         protocol: HTTPS
-      hosts: [httpbin.org]
+      hosts: [httpbingo.org]
       tls:
         mode: ISTIO_MUTUAL # preserves caller identity across the hop
 ---
@@ -54,15 +54,15 @@ spec:
           number: 80
         tls:
           mode: ISTIO_MUTUAL
-          sni: httpbin.org
+          sni: httpbingo.org
 ---
 apiVersion: networking.istio.io/v1
 kind: DestinationRule
 metadata:
-  name: httpbin-org-tls-origination
+  name: httpbingo-org-tls-origination
   namespace: istio-egress
 spec:
-  host: httpbin.org
+  host: httpbingo.org
   trafficPolicy:
     portLevelSettings:
       - port:
@@ -73,10 +73,10 @@ spec:
 apiVersion: networking.istio.io/v1
 kind: VirtualService
 metadata:
-  name: httpbin-org-through-egress
+  name: httpbingo-org-through-egress
   namespace: istio-egress
 spec:
-  hosts: [httpbin.org]
+  hosts: [httpbingo.org]
   gateways:
     - mesh
     - istio-egress/egress-gateway
@@ -93,5 +93,5 @@ spec:
           port: 8080
       route:
         - destination:
-            host: httpbin.org
+            host: httpbingo.org
             port: {number: 443}
