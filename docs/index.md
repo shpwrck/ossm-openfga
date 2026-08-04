@@ -4,7 +4,7 @@ This is a self-guided demonstration of **fine-grained authorization** on OpenShi
 By the end of it you will have a cluster where every one of these questions is
 answered by a single [OpenFGA](https://openfga.dev) store:
 
-<div class="grid cards" markdown>
+<div class="grid cards three-planes" markdown>
 
 - :material-login: **Ingress** — *"May this **user** call this **route**?"*
   Enforced by **Red Hat Connectivity Link** at the Gateway API gateway.
