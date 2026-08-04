@@ -144,6 +144,19 @@ collides with a second server on 8081), and OSSM 3 injects `istio-proxy` as a
 **native sidecar** (`spec.initContainers`) — anything asserting on
 `spec.containers` alone misses it.
 
+**Pass 3 addendum — `ipBlock.except` sweep** (same cluster, same day): the
+`netpol-except` phase confirmed the known OVN-K guidance against `except`
+with numbers. The negated ACL match is live on this version
+(`ip4.src != {…}`), and OpenFlow cost follows **2 × complement-CIDR-pieces
+per policy**: 500 one-rule policies with 8 *scattered* excepts = +8,000
+flows on the selected pod's node (+32,004 at 2000 policies, 10× the node's
+baseline table) while the same excepts packed *contiguously* aggregate away
+to +1,000. Propagation latency stayed ~66 ms at this scale — flow count is
+the early-warning metric, not latency. Bring-up finding, fixed in the
+harness: a mis-indented `except` (sibling of `ipBlock`) is an unknown field
+the API server **silently prunes** — the policy applies with no carve-out;
+the generator now read-back-asserts every batch's excepts landed.
+
 ## Not validated
 
 - `TLSPolicy`/`DNSPolicy` (deliberately out of scope).

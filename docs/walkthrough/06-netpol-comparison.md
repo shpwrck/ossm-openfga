@@ -70,10 +70,13 @@ make perf                      # setup → overhead → netpol-scale → tuple-s
 
 Knobs (env vars): `PERF_QPS_TIERS="100 1000"`, `PERF_DURATION=60s`,
 `PERF_NETPOL_TIERS="0 100 1000 5000"`, `PERF_TUPLE_COUNT=10000`,
-`PERF_TRIALS=5`. Raw fortio JSON, probe timestamps, and `kubectl top`
-snapshots land in `perf-results/<timestamp>/`; `summary.md` is the collated
-report. Phases are resumable — a rerun skips work whose results already
-exist.
+`PERF_TRIALS=5`; for the `netpol-except` phase: `PERF_EXCEPT_N=500`,
+`PERF_EXCEPT_COUNTS="0 2 4 8"`, `PERF_EXCEPT_TIERS="1000 2000"`, and
+`PERF_EXCEPT_LAYOUT=scattered|contiguous` (run it once per layout to
+reproduce both tables below). Raw fortio JSON, probe timestamps, OVS flow
+counts, and `kubectl top` snapshots land in `perf-results/<timestamp>/`;
+`summary.md` is the collated report. Phases are resumable — a rerun skips
+work whose results already exist.
 
 ## Results from the reference cluster
 
@@ -137,6 +140,67 @@ Median (min–max) over 5 trials per direction, single-clock in-pod probe:
   recompiled flows. Policy churn, not policy existence, is what hurts OVN.
 - Per-request latency **with all 5000 policies programmed**: p50 0.64 ms —
   identical to the empty namespace. The data plane genuinely does not care.
+
+### The `except` clause: where NetworkPolicy flow count actually goes
+
+The propagation table above used label-selector policies — the cheap kind.
+`ipBlock` policies with `except` carve-outs are the expensive kind, and the
+harness measures why (`run-perf.sh netpol-except`). An except-bearing peer
+compiles to an OVN ACL with a **negated set match** — live from this cluster:
+
+```
+ip4.src == 172.16.0.0/24 && ip4.src != {172.16.0.0/28, 172.16.0.16/28} && tcp && ...
+```
+
+OVN resolves that `!=` by rewriting `cidr − excepts` into **positive
+complement CIDRs**, and every complement piece becomes OpenFlow flows on
+each node hosting a selected pod. Measured on the server's node
+(`ovs-ofctl dump-aggregate br-int`, delta vs a 3,422-flow baseline; each
+policy has ONE rule — multiple ports/rules multiply everything again):
+
+| 500 policies of… | Δ flows | flows/policy |
+|---|---|---|
+| label selector (empty peer sets) | +0 | 0 |
+| ipBlock /24, no except | +1,000 | 2 |
+| ipBlock + 2 **scattered** excepts | +4,000 | 8 |
+| ipBlock + 4 scattered excepts | +5,000 | 10 |
+| ipBlock + 8 scattered excepts | +8,000 | 16 |
+| ipBlock + 8 scattered excepts × **2000 policies** | **+32,004** | 16 |
+
+The rule the numbers obey: **flows/policy = 2 × (CIDR pieces of
+`cidr − excepts`)** — and the *layout* of the excepts, not their count,
+decides the piece count. The same sweep with the excepts packed
+contiguously collapses right back (2 excepts → +3,000; 8 excepts →
+**+1,000, identical to no except at all**), because adjacent carve-outs
+aggregate into one complement range. Scattered excepts — the realistic
+case, excepting specific subnets dotted through a range — pay per hole,
+linearly in policy count: 2000 such policies put 10× the node's entire
+baseline flow table on br-int before any of them match a packet.
+
+Three practical conclusions:
+
+1. **The discouragement of `except` is measured fact, but the precise cost
+   driver is fragmentation.** If you must except, except *aggregable*
+   ranges; auditing existing policies for scattered excepts is a cheap win.
+2. **A mis-indented `except` fails silently open.** `except` placed as a
+   sibling of `ipBlock` (an easy YAML slip in a template) is an unknown
+   field the API server **prunes without error** — the policy applies,
+   the carve-out doesn't exist. The harness now proves its excepts landed
+   by reading the live object back; do the same in CI for any
+   except-bearing policy you ship.
+3. **This is another cost that authorization-as-data doesn't have.** The
+   OpenFGA side of this comparison has no analogue of flow inflation:
+   excluding one caller is deleting one tuple, not recompiling the
+   complement of an address range onto every node. If your `except` blocks
+   exist to say "everyone in this range may call, except *those two
+   services*," that is an identity statement forced through an IP-range
+   data structure — the mesh plane expresses it natively.
+
+At this demo's scale the inflated tables did not yet move the propagation
+median (~66 ms throughout; worst single trial 120 ms at 2000×8), and
+ovn-controller peaked at 42 m/79 MiB — the flow *count* is the early-warning
+metric, and it multiplies by rules-per-policy and pods-per-node before it
+becomes the multi-minute convergence incidents seen on large clusters.
 
 ### Policy propagation: OpenFGA tuple write
 

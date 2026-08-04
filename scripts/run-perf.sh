@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
 # The NetworkPolicy-vs-OpenFGA comparison harness (walkthrough chapter 6).
 #
-#   run-perf.sh [all|setup|overhead|netpol-scale|tuple-scale|report|teardown]
+#   run-perf.sh [all|setup|overhead|netpol-scale|netpol-except|tuple-scale|report|teardown]
 #
-# Phases (all = setup → overhead → netpol-scale → tuple-scale → report):
-#   setup        deploy the perf arenas (deploy/perf), record environment
-#   overhead     fixed-QPS fortio matrix: base / netpol / mesh / mesh_fga
-#   netpol-scale policy propagation latency at N background NetworkPolicies,
-#                plus OVN resource snapshots and per-request flatness at max N
-#   tuple-scale  tuple propagation latency at seed vs bulk tuple count,
-#                plus OpenFGA/bridge resource snapshots
-#   report       collate everything into summary.md (scripts/perf-report.py)
-#   teardown     delete the perf namespaces (results stay on disk)
+# Phases (all = setup → overhead → netpol-scale → netpol-except → tuple-scale → report):
+#   setup         deploy the perf arenas (deploy/perf), record environment
+#   overhead      fixed-QPS fortio matrix: base / netpol / mesh / mesh_fga
+#   netpol-scale  policy propagation latency at N background NetworkPolicies,
+#                 plus OVN resource snapshots and per-request flatness at max N
+#   netpol-except ipBlock.except sweep: OVS flow inflation, propagation
+#                 latency, and ovn-controller footprint per except entry
+#   tuple-scale   tuple propagation latency at seed vs bulk tuple count,
+#                 plus OpenFGA/bridge resource snapshots
+#   report        collate everything into summary.md (scripts/perf-report.py)
+#   teardown      delete the perf namespaces (results stay on disk)
 #
 # Knobs (env): PERF_QPS_TIERS="100 1000"  PERF_DURATION=60s  PERF_CONNS=8
 #              PERF_NETPOL_TIERS="0 100 1000 5000"  PERF_TUPLE_COUNT=10000
 #              PERF_TRIALS=5  PERF_RESULTS_DIR=<dir>
+#              PERF_EXCEPT_N=500  PERF_EXCEPT_COUNTS="0 2 4 8"
+#              PERF_EXCEPT_TIERS="1000 2000"  PERF_EXCEPT_TRIALS=3
+#              PERF_EXCEPT_LAYOUT=scattered|contiguous (except placement —
+#                scattered holes cost flows per except; contiguous aggregate)
 #
 # Requires: the demo through `make mesh` (OpenFGA + bridge + extensionProvider
 # registered). Assumes the current oc context, like every other script here.
@@ -172,6 +178,28 @@ PY
 
 bg_count() { oc -n perf get netpol -l perf-scale=bg --no-headers 2>/dev/null | wc -l; }
 
+ovs_flows() { # append "node flow_count" per node to stdout (br-int aggregate)
+  local pod node
+  oc -n openshift-ovn-kubernetes get pods -l app=ovnkube-node \
+    -o jsonpath='{range .items[*]}{.metadata.name} {.spec.nodeName}{"\n"}{end}' |
+  while read -r pod node; do
+    printf '%s %s\n' "$node" "$(oc -n openshift-ovn-kubernetes exec "$pod" \
+      -c ovn-controller -- ovs-ofctl -O OpenFlow15 dump-aggregate br-int \
+      < /dev/null 2>/dev/null |
+      grep -oP 'flow_count=\K[0-9]+' || echo '?')"
+  done
+}
+
+top_ovn_containers() { # append per-container top for ovnkube-node pods
+  local out="$1"
+  {
+    date -u +%FT%TZ
+    oc -n openshift-ovn-kubernetes adm top pods --containers --no-headers \
+      2>/dev/null | grep -E 'ovnkube-node' || true
+    echo
+  } >> "$out"
+}
+
 create_bg() { # create_bg <count> <start-index> <time-file>
   local count="$1" start="$2" out="$3" tmp t0 f pids=()
   tmp="$(mktemp -d)"
@@ -213,6 +241,75 @@ PY
   echo "$count $((SECONDS - t0))" >> "$out"
   ok "$count policies accepted in $((SECONDS - t0))s"
   rm -rf "$tmp"
+}
+
+create_bg_except() { # create_bg_except <count> <start-index> <excepts-per-policy> <stride> <time-file>
+  # ipBlock-based background policies. Each policy allows a unique /24 out of
+  # 172.16.0.0/13 (clear of the pod 10.128/14 and service 172.30/16 networks,
+  # so probe preconditions hold) with K /28 `except` carve-outs — the shape
+  # OVN-K guidance discourages: each except becomes a `!=` in the ACL match.
+  # OVN compiles `cidr − excepts` into POSITIVE complement CIDRs, so the flow
+  # cost tracks the complement's piece count, and the except LAYOUT decides
+  # it: stride 16 packs the /28s contiguously (they aggregate; the complement
+  # collapses to ~1 piece), stride 32 scatters them (every except punches its
+  # own hole; pieces ≈ K — the realistic worst case).
+  local count="$1" start="$2" excepts="$3" stride="$4" out="$5" tmp t0 f pids=()
+  tmp="$(mktemp -d)"
+  python3 - "$count" "$start" "$excepts" "$stride" "$tmp" <<'PY'
+import sys, os
+count, start, k, stride, outdir = (int(sys.argv[1]), int(sys.argv[2]),
+                                   int(sys.argv[3]), int(sys.argv[4]),
+                                   sys.argv[5])
+assert k * stride <= 256, "excepts must fit inside the /24"
+files = [open(os.path.join(outdir, f"chunk-{j}.yaml"), "w") for j in range(8)]
+for n in range(count):
+    i = start + n
+    a, b = 16 + (i // 256) % 8, i % 256
+    cidr = f"172.{a}.{b}.0/24"
+    # `except` MUST sit under ipBlock (sibling of cidr, 12 spaces): a
+    # mis-indented except is an unknown peer field that the API server
+    # silently prunes — the read-back check below catches that class of bug
+    exc = "".join(f"\n              - 172.{a}.{b}.{j*stride}/28" for j in range(k))
+    exc = f"\n            except:{exc}" if k else ""
+    files[n % 8].write(f"""---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: perf-bg-x-{i:05d}
+  namespace: perf
+  labels: {{perf-scale: bg, perf-style: except}}
+spec:
+  podSelector:
+    matchLabels: {{app: fortio-server}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: {cidr}{exc}
+      ports:
+        - port: {9000 + (i % 50000)}
+          protocol: TCP
+""")
+for f in files:
+    f.close()
+PY
+  info "creating $count ipBlock policies with $excepts except(s) each"
+  t0=$SECONDS
+  for f in "$tmp"/chunk-*.yaml; do
+    [[ -s "$f" ]] || continue
+    oc create -f "$f" >/dev/null & pids+=("$!")
+  done
+  for f in "${pids[@]}"; do wait "$f"; done
+  echo "$count $((SECONDS - t0))" >> "$out"
+  ok "$count policies accepted in $((SECONDS - t0))s"
+  rm -rf "$tmp"
+  # read-back assertion: the API silently prunes unknown fields, so prove the
+  # excepts actually LANDED instead of trusting the accepted YAML
+  local got
+  got="$(oc -n perf get netpol "perf-bg-x-$(printf '%05d' "$start")" \
+    -o jsonpath='{.spec.ingress[0].from[0].ipBlock.except}' | tr -cd '/' | wc -c)"
+  [[ "$got" -eq "$excepts" ]] ||
+    die "except read-back: wanted $excepts entries, live object has $got — YAML shape bug"
 }
 
 bulk_tuples() { # bulk_tuples write|delete <count> <time-file>
@@ -382,6 +479,88 @@ phase_netpol_scale() {
   ok "netpol-scale complete (background policies removed)"
 }
 
+phase_netpol_except() {
+  local XLAYOUT="${PERF_EXCEPT_LAYOUT:-scattered}" stride xd
+  case "$XLAYOUT" in
+    scattered)  stride=32; xd="$RESULTS/netpol-except" ;;
+    contiguous) stride=16; xd="$RESULTS/netpol-except-contiguous" ;;
+    *) die "PERF_EXCEPT_LAYOUT must be scattered or contiguous" ;;
+  esac
+  info "phase: netpol-except ($XLAYOUT layout → OpenFlow flow inflation)"
+  local dir k n cur t t0
+  local XN="${PERF_EXCEPT_N:-500}"
+  local XCOUNTS="${PERF_EXCEPT_COUNTS:-0 2 4 8}"
+  local XTIERS="${PERF_EXCEPT_TIERS:-1000 2000}"
+  local XTRIALS="${PERF_EXCEPT_TRIALS:-3}"
+  mkdir -p "$xd"
+
+  combo_measure() { # combo_measure <dir> — settle, flows, top, trials
+    local dir="$1" i
+    mkdir -p "$dir"
+    info "settling 30s"
+    sleep 30
+    ovs_flows > "$dir/flows.txt"
+    top_snap "$dir/top-ovn.txt" openshift-ovn-kubernetes
+    top_ovn_containers "$dir/top-ovn-containers.txt"
+    for ((i = 1; i <= XTRIALS; i++)); do
+      client_exec perf /probe/measure-netpol.sh apply "$SERVER_PLAIN" \
+        >> "$dir/trials-apply.txt"
+      sleep 1
+      client_exec perf /probe/measure-netpol.sh delete "$SERVER_PLAIN" \
+        >> "$dir/trials-delete.txt"
+      sleep 1
+    done
+  }
+
+  bg_wipe() { # bg_wipe <time-file> — timed bulk delete of ALL bg policies
+    local out="$1" n0
+    n0="$(bg_count)"
+    [[ "$n0" -eq 0 ]] && return 0
+    t0=$SECONDS
+    oc -n perf delete netpol -l perf-scale=bg --wait=false >/dev/null 2>&1 || true
+    until [[ "$(bg_count)" -eq 0 ]]; do sleep 2; done
+    echo "$n0 $((SECONDS - t0))" >> "$out"
+    ok "removed $n0 background policies in $((SECONDS - t0))s"
+  }
+
+  oc apply -f "$REPO_ROOT/deploy/perf/netpol/default-deny.yaml" >/dev/null
+  oc -n perf delete netpol perf-allow-client --ignore-not-found
+  sleep 3
+  wait_probe_denied perf "$SERVER_PLAIN"
+  bg_wipe "$xd/pre-wipe-time.txt"
+  ovs_flows > "$xd/baseline-flows.txt"
+  top_ovn_containers "$xd/baseline-top-containers.txt"
+
+  # control: plain label-selector policies at the same N
+  dir="$xd/combo-sel-N$(printf '%05d' "$XN")"
+  mkdir -p "$dir"
+  create_bg "$XN" 0 "$dir/create-time.txt"
+  combo_measure "$dir"
+  bg_wipe "$dir/delete-time.txt"
+
+  # part A — per-except growth at fixed N (K=0 is the ipBlock control)
+  for k in $XCOUNTS; do
+    dir="$xd/combo-K${k}-N$(printf '%05d' "$XN")"
+    mkdir -p "$dir"
+    create_bg_except "$XN" 0 "$k" "$stride" "$dir/create-time.txt"
+    combo_measure "$dir"
+    bg_wipe "$dir/delete-time.txt"
+  done
+
+  # part B — policy count at the heaviest K (top-up, no interim wipe)
+  local kmax="${XCOUNTS##* }"
+  for n in $XTIERS; do
+    dir="$xd/combo-K${kmax}-N$(printf '%05d' "$n")"
+    mkdir -p "$dir"
+    cur="$(bg_count)"
+    (( n > cur )) && create_bg_except "$((n - cur))" "$cur" "$kmax" "$stride" "$dir/create-time.txt"
+    combo_measure "$dir"
+  done
+  bg_wipe "$xd/final-wipe-time.txt"
+  ovs_flows > "$xd/after-wipe-flows.txt"
+  ok "netpol-except complete (background policies removed)"
+}
+
 phase_tuple_scale() {
   info "phase: tuple-scale (propagation at seed vs $TUPLE_COUNT tuples)"
   local td="$RESULTS/tuple-scale" t
@@ -439,13 +618,14 @@ phase_teardown() {
 
 # ── dispatch ────────────────────────────────────────────────────────────────
 case "${1:-all}" in
-  setup)        phase_setup ;;
-  overhead)     phase_overhead ;;
-  netpol-scale) phase_netpol_scale ;;
-  tuple-scale)  phase_tuple_scale ;;
-  report)       phase_report ;;
-  teardown)     phase_teardown ;;
-  all)          phase_setup; phase_overhead; phase_netpol_scale
-                phase_tuple_scale; phase_report ;;
-  *) die "usage: $0 [all|setup|overhead|netpol-scale|tuple-scale|report|teardown]" ;;
+  setup)         phase_setup ;;
+  overhead)      phase_overhead ;;
+  netpol-scale)  phase_netpol_scale ;;
+  netpol-except) phase_netpol_except ;;
+  tuple-scale)   phase_tuple_scale ;;
+  report)        phase_report ;;
+  teardown)      phase_teardown ;;
+  all)           phase_setup; phase_overhead; phase_netpol_scale
+                 phase_netpol_except; phase_tuple_scale; phase_report ;;
+  *) die "usage: $0 [all|setup|overhead|netpol-scale|netpol-except|tuple-scale|report|teardown]" ;;
 esac
